@@ -1,0 +1,84 @@
+{
+  "name": "@redaksjon/protokoll-engine",
+  "version": "0.1.0",
+  "description": "Processing engine for Protokoll - transcription pipeline, agentic execution, routing, and LLM integration",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redaksjon/protokoll.git",
+    "directory": "protokoll-engine"
+  },
+  "keywords": [
+    "transcription",
+    "pipeline",
+    "agentic",
+    "llm",
+    "routing"
+  ],
+  "author": "Tim O'Brien <tobrien@discursive.com>",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "npm run lint && tsc --noEmit && vite build",
+    "dev": "vite",
+    "watch": "vite build --watch",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "clean": "rm -rf dist",
+    "precommit": "npm run lint && npm run test:coverage && npm run build",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
+    "@google/generative-ai": "^0.24.1",
+    "@kjerneverk/riotprompt": "^1.0.6",
+    "@redaksjon/context": "file:../redaksjon-context",
+    "@redaksjon/protokoll-format": "file:../protokoll-format",
+    "@utilarium/cardigantime": "^0.0.26",
+    "@utilarium/dreadcabinet": "^0.0.16",
+    "dayjs": "^1.11.13",
+    "fluent-ffmpeg": "^2.1.3",
+    "glob": "^13.0.3",
+    "gray-matter": "^4.0.3",
+    "js-yaml": "^4.1.0",
+    "luxon": "^3.5.0",
+    "moment-timezone": "^0.5.46",
+    "openai": "^4.77.3",
+    "winston": "^3.17.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.2.0",
+    "@eslint/js": "^9.18.0",
+    "@types/fluent-ffmpeg": "^2.1.27",
+    "@types/js-yaml": "^4.0.9",
+    "@types/luxon": "^3.4.2",
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.20.0",
+    "@typescript-eslint/parser": "^8.20.0",
+    "@vitest/coverage-v8": "^2.1.8",
+    "ajv": "^8.18.0",
+    "eslint": "^9.18.0",
+    "eslint-plugin-import": "^2.31.0",
+    "globals": "^15.14.0",
+    "typescript": "^5.5.0",
+    "vite": "^7.3.1",
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^2.1.8"
+  }
+}
