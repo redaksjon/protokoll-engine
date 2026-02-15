@@ -16,8 +16,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/redaksjon/protokoll.git",
-    "directory": "protokoll-engine"
+    "url": "git+https://github.com/redaksjon/protokoll-engine.git"
   },
   "keywords": [
     "transcription",
