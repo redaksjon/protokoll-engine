@@ -50,6 +50,9 @@ jobs:
               echo "⚠️  Skipping publish: Production version detected on non-release push"
             fi
           fi
+      - name: Install build tools for native modules
+        if: steps.npm-tag.outputs.should_publish == 'true'
+        run: sudo apt-get update && sudo apt-get install -y build-essential python3
       - run: npm install -g npm@latest
         if: steps.npm-tag.outputs.should_publish == 'true'
       - run: npm install --verbose --foreground-scripts
