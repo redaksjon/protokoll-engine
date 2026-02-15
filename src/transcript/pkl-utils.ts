@@ -7,7 +7,7 @@
 
 import * as path from 'node:path';
 import * as fs from 'fs/promises';
-import { PklTranscript } from '@redaksjon/protokoll-format';
+import { PklTranscript, isUuidInput } from '@redaksjon/protokoll-format';
 import type { TranscriptMetadata as PklMetadata } from '@redaksjon/protokoll-format';
 
 /**
@@ -58,6 +58,39 @@ export async function transcriptExists(basePath: string): Promise<{ exists: bool
     } catch {
         return { exists: false, path: null };
     }
+}
+
+/**
+ * Enhanced transcript existence check supporting UUID
+ * 
+ * @param pathOrUuid - File path or UUID to check
+ * @param searchDirectories - Optional directories to search if UUID is provided
+ * @returns Existence info with path and UUID if found
+ */
+export async function transcriptExistsUuid(
+    pathOrUuid: string,
+    searchDirectories?: string[]
+): Promise<{ exists: boolean; path?: string; uuid?: string }> {
+    if (isUuidInput(pathOrUuid)) {
+        if (!searchDirectories || searchDirectories.length === 0) {
+            return { exists: false };
+        }
+        // Import dynamically to avoid circular dependency
+        const { findTranscriptByUuid } = await import('./operations');
+        const foundPath = await findTranscriptByUuid(pathOrUuid, searchDirectories);
+        if (foundPath) {
+            // Extract UUID from found file
+            const transcript = PklTranscript.open(foundPath, { readOnly: true });
+            const uuid = transcript.metadata.id;
+            transcript.close();
+            return { exists: true, path: foundPath, uuid };
+        }
+        return { exists: false };
+    }
+    
+    // Fallback to existing transcriptExists logic
+    const result = await transcriptExists(ensurePklExtension(pathOrUuid));
+    return { exists: result.exists, path: result.path ?? undefined };
 }
 
 /**
