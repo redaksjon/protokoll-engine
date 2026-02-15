@@ -6,7 +6,7 @@
  */
 
 import { ReflectionReport } from '../reflection/types';
-import { OutputPaths } from '../output/types';
+import { OutputPaths } from '../out/types';
 
 export type { OutputPaths };
 
