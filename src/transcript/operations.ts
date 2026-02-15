@@ -527,9 +527,6 @@ export const editTranscript = async (
         let outputPath = pklPath;
         
         if (targetProject?.routing?.destination || options.title) {
-            const config = context.getConfig();
-            const defaultPath = expandPath((config.outputDirectory as string) || '~/notes');
-            
             if (targetProject?.routing?.destination) {
                 const routingConfig = buildRoutingConfig(context, targetProject);
                 const routing = Routing.create(routingConfig, context);
