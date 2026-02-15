@@ -1,6 +1,6 @@
 {
   "name": "@redaksjon/protokoll-engine",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Processing engine for Protokoll - transcription pipeline, agentic execution, routing, and LLM integration",
   "type": "module",
   "main": "dist/index.js",
@@ -58,7 +58,7 @@
     "js-yaml": "^4.1.0",
     "luxon": "^3.5.0",
     "moment-timezone": "^0.5.46",
-    "openai": "^4.77.3",
+    "openai": "^6.22.0",
     "winston": "^3.17.0",
     "zod": "^4.3.6"
   },

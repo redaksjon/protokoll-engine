@@ -53,10 +53,15 @@ jobs:
       - name: Install build tools for native modules
         if: steps.npm-tag.outputs.should_publish == 'true'
         run: sudo apt-get update && sudo apt-get install -y build-essential python3
-      - run: npm install -g npm@latest
+      - name: Install dependencies
         if: steps.npm-tag.outputs.should_publish == 'true'
-      - run: npm install --verbose --foreground-scripts
-        if: steps.npm-tag.outputs.should_publish == 'true'
+        run: |
+          # Use public npm registry (package-lock.json is gitignored)
+          npm config set registry https://registry.npmjs.org/
+          # Clean install to ensure platform-specific optional deps (rollup native bindings) are resolved correctly
+          # See: https://github.com/npm/cli/issues/4828
+          rm -rf node_modules package-lock.json
+          npm install --force
         timeout-minutes: 10
       - name: Update package.json version for pre-release
         if: steps.npm-tag.outputs.should_publish == 'true' && steps.npm-tag.outputs.tag == 'dev'
