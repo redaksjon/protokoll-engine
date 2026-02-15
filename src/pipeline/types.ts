@@ -6,16 +6,9 @@
  */
 
 import { ReflectionReport } from '../reflection/types';
+import { OutputPaths } from '../out/types';
 
-// OutputPaths type (inline definition)
-export interface OutputPaths {
-    output: string;
-    final: string;
-    intermediate: {
-        [key: string]: string;
-    };
-    [key: string]: string | { [key: string]: string };
-}
+export type { OutputPaths };
 
 export interface PipelineConfig {
     // Model settings

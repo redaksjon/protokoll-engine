@@ -11,7 +11,7 @@
 import { PipelineConfig, PipelineInput, PipelineResult, PipelineState } from './types';
 import * as Context from '@redaksjon/context';
 import * as Routing from '../routing';
-import * as Output from '../output';
+import * as Output from '../out';
 import * as Reflection from '../reflection';
 import * as Transcription from '../transcription';
 import * as Reasoning from '../reasoning';
