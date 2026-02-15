@@ -45,7 +45,10 @@ export default defineConfig({
                 'node:child_process',
                 'node:stream',
                 'node:util',
+                'node:readline',
+                'node:crypto',
                 'fs',
+                'readline',
                 'fs/promises',
                 'path',
                 'os',
@@ -53,6 +56,7 @@ export default defineConfig({
                 'child_process',
                 'stream',
                 'util',
+                'crypto',
             ],
             output: {
                 preserveModules: true,

@@ -13,7 +13,7 @@ import { FeedbackConfig, ClassificationDecision, ClassificationFeedback, Feedbac
 import * as Handler from './handler';
 import * as Analyzer from './analyzer';
 import * as Reasoning from '../reasoning';
-import * as Context from '../context';
+import * as Context from '@redaksjon/context';
 
 export interface FeedbackInstance {
     collectAndProcess(decision: ClassificationDecision): Promise<{

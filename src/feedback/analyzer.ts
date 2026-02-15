@@ -7,7 +7,7 @@
 
 import { ClassificationFeedback, FeedbackAnalysis, LearningUpdate } from './types';
 import * as Reasoning from '../reasoning';
-import * as Context from '../context';
+import * as Context from '@redaksjon/context';
 import * as Logging from '../logging';
 
 export interface AnalyzerInstance {
