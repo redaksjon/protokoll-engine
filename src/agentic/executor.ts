@@ -10,6 +10,7 @@ import * as Registry from './registry';
 import * as Reasoning from '../reasoning';
 import * as Logging from '../logging';
 import { ConversationBuilder, ToolCall as RiotToolCall } from '@kjerneverk/riotprompt';
+import { EntityPrepositioner } from '../weighting/prepositioning';
 
 export interface ContextChangeRecord {
     entityType: 'person' | 'project' | 'company' | 'term' | 'ignored';
@@ -157,8 +158,19 @@ export const create = (
                 preserveRecent: 5               // Keep last 5 messages
             });
     
+        // Generate entity prepositioning guidance if weight model is available
+        // Note: At this point, routing hasn't happened yet, so we can't use project-specific predictions
+        // The weight model will still provide co-occurrence predictions based on any entities found
+        const prepositioner = ctx.weightModelProvider
+            ? new EntityPrepositioner(ctx.weightModelProvider, ctx.contextInstance)
+            : null;
+        
+        const entityGuidance = prepositioner
+            ? prepositioner.generateGuidance(undefined) // No project ID yet
+            : { likelyEntities: [], guidance: '' };
+
         // Build the system prompt
-        const systemPrompt = `You are an intelligent transcription assistant. Your job is to:
+        let systemPrompt = `You are an intelligent transcription assistant. Your job is to:
 1. Analyze the transcript for names, projects, and companies
 2. Use the available tools to verify spellings and gather context
 3. Correct any misheard names or terms
@@ -186,6 +198,12 @@ Available tools:
 - verify_spelling: Ask user about unknown terms (if interactive mode)
 - route_note: Determine where to file this note
 - store_context: Remember new information for future use`;
+
+        // Add entity guidance if available
+        if (entityGuidance.guidance) {
+            systemPrompt += `\n\n## Entity Guidance\n${entityGuidance.guidance}`;
+            systemPrompt += '\n\nUse this guidance to improve entity recognition, but verify entities exist in the context before referencing them.';
+        }
 
         // Add system message using ConversationBuilder
         conversation.addSystemMessage(systemPrompt);

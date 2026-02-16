@@ -157,7 +157,7 @@ export const create = (config: OutputConfig): ManagerInstance => {
         } : undefined;
         
         const pklMetadata = metadata ? {
-            id: randomUUID(),
+            id: metadata.id || randomUUID(), // Use provided UUID or generate new one
             title: metadata.title,
             date: metadata.date,
             recordingTime: metadata.recordingTime,

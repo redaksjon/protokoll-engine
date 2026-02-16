@@ -371,7 +371,7 @@ export const combineTranscripts = async (
     
     if (targetProject?.routing?.destination) {
         const routingConfig = buildRoutingConfig(context, targetProject);
-        const routing = Routing.create(routingConfig, context);
+        const routing = Routing.create(routingConfig, context, undefined);
         
         const audioDate = extractDateFromMetadata(baseMetadata, firstTranscript.filePath);
         
@@ -529,7 +529,7 @@ export const editTranscript = async (
         if (targetProject?.routing?.destination || options.title) {
             if (targetProject?.routing?.destination) {
                 const routingConfig = buildRoutingConfig(context, targetProject);
-                const routing = Routing.create(routingConfig, context);
+                const routing = Routing.create(routingConfig, context, undefined);
                 
                 const audioDate = pklMetadata.date instanceof Date ? pklMetadata.date : new Date();
                 
@@ -619,7 +619,7 @@ export interface TranscriptListItem {
     title: string;
     hasRawTranscript: boolean;
     createdAt: Date;
-    status?: 'initial' | 'enhanced' | 'reviewed' | 'in_progress' | 'closed' | 'archived';
+    status?: import('@redaksjon/protokoll-format').TranscriptStatus;
     openTasksCount?: number;
     contentSize?: number;
     entities?: {
@@ -721,3 +721,43 @@ export const listTranscripts = async (options: ListTranscriptsOptions): Promise<
         offset,
     };
 };
+
+/**
+ * Validate status transitions for transcript lifecycle
+ * 
+ * Ensures status changes follow valid workflow:
+ * - Upload workflow: uploaded → transcribing → initial → enhanced → reviewed → closed
+ * - Error can occur at any point
+ * - Error status allows retry (back to uploaded or transcribing)
+ * 
+ * @param from - Current status
+ * @param to - Desired status
+ * @returns true if transition is valid, false otherwise
+ */
+export function isValidStatusTransition(
+    from: import('@redaksjon/protokoll-format').TranscriptStatus | undefined,
+    to: import('@redaksjon/protokoll-format').TranscriptStatus
+): boolean {
+    // If no current status, any status is valid (initial creation)
+    if (!from) {
+        return true;
+    }
+    
+    // Define valid transitions for each status
+    const validTransitions: Record<
+        import('@redaksjon/protokoll-format').TranscriptStatus,
+        import('@redaksjon/protokoll-format').TranscriptStatus[]
+    > = {
+        'uploaded': ['transcribing', 'error'],
+        'transcribing': ['initial', 'error'],
+        'error': ['uploaded', 'transcribing'], // Allow retry
+        'initial': ['enhanced', 'in_progress', 'error'],
+        'enhanced': ['reviewed', 'in_progress', 'error'],
+        'reviewed': ['closed', 'in_progress', 'error'],
+        'in_progress': ['initial', 'enhanced', 'reviewed', 'closed', 'error'],
+        'closed': ['archived', 'in_progress', 'error'],
+        'archived': ['closed', 'error'], // Allow un-archiving
+    };
+    
+    return validTransitions[from]?.includes(to) ?? false;
+}

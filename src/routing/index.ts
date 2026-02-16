@@ -13,6 +13,7 @@ import { RoutingConfig, RouteDecision, RoutingContext, RouteDestination, Project
 import * as Router from './router';
 import * as Classifier from './classifier';
 import * as Context from '@redaksjon/context';
+import type { WeightModelProvider } from '../weighting/provider';
 
 export interface RoutingInstance {
     route(context: RoutingContext): RouteDecision;
@@ -24,9 +25,10 @@ export interface RoutingInstance {
 
 export const create = (
     config: RoutingConfig,
-    context: Context.ContextInstance
+    context: Context.ContextInstance,
+    weightModelProvider?: WeightModelProvider
 ): RoutingInstance => {
-    const classifier = Classifier.create(context);
+    const classifier = Classifier.create(context, weightModelProvider);
     const router = Router.create(config, classifier);
   
     // Mutable config for self-update feature

@@ -47,6 +47,9 @@ export interface EntityReference {
 }
 
 export interface TranscriptMetadata {
+    // UUID identifier
+    id?: string;
+    
     // Core fields
     title?: string;
     project?: string;
