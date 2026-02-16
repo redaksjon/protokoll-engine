@@ -23,6 +23,9 @@ export * as Phases from './phases';
 export * as Transcript from './transcript';
 export * as Reflection from './reflection';
 
+// Weighting module
+export * as Weighting from './weighting';
+
 // Shared utilities
 export * as Util from './util/storage';
 export * as Media from './util/media';

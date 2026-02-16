@@ -18,6 +18,7 @@ import * as Reasoning from '../reasoning';
 import * as Agentic from '../agentic';
 import * as CompletePhase from '../phases/complete';
 import * as Logging from '../logging';
+import { randomUUID } from 'node:crypto';
 import * as Metadata from '../util/metadata';
 
 export interface OrchestratorInstance {
@@ -83,7 +84,7 @@ export const create = async (config: OrchestratorConfig): Promise<OrchestratorIn
         conflict_resolution: 'primary',
     };
   
-    const routing = Routing.create(routingConfig, context);
+    const routing = Routing.create(routingConfig, context, config.weightModelProvider);
     logger.debug('Routing system initialized');
   
     // Interactive moved to protokoll-cli
@@ -339,6 +340,7 @@ Rules:
                 interactiveMode: config.interactive,
                 // Interactive moved to protokoll-cli
                 // interactiveInstance: interactive,
+                weightModelProvider: config.weightModelProvider,
             };
             
             const executor = Agentic.create(reasoning, toolContext);
@@ -514,8 +516,12 @@ Rules:
                     }
                 }
                 
+                // Generate UUID for this transcript
+                const transcriptUuid = randomUUID();
+                
                 // Build metadata from routing decision and input
                 const transcriptMetadata: Metadata.TranscriptMetadata = {
+                    id: transcriptUuid,
                     title,
                     projectId: routeResult.projectId || undefined,
                     project: routeResult.projectId || undefined,
@@ -527,6 +533,29 @@ Rules:
                 };
                 
                 await output.writeTranscript(paths, state.enhancedText, transcriptMetadata);
+                
+                // Notify weight model of entity updates (if callback provided)
+                if (config.onTranscriptEntitiesUpdated && transcriptMetadata.entities) {
+                    const allEntityIds: string[] = [];
+                    if (transcriptMetadata.entities.people) {
+                        allEntityIds.push(...transcriptMetadata.entities.people.map(e => e.id));
+                    }
+                    if (transcriptMetadata.entities.projects) {
+                        allEntityIds.push(...transcriptMetadata.entities.projects.map(e => e.id));
+                    }
+                    if (transcriptMetadata.entities.terms) {
+                        allEntityIds.push(...transcriptMetadata.entities.terms.map(e => e.id));
+                    }
+                    if (transcriptMetadata.entities.companies) {
+                        allEntityIds.push(...transcriptMetadata.entities.companies.map(e => e.id));
+                    }
+                    
+                    config.onTranscriptEntitiesUpdated(
+                        transcriptUuid,
+                        allEntityIds,
+                        routeResult.projectId || undefined
+                    );
+                }
             }
       
             // Step 7: Generate reflection report

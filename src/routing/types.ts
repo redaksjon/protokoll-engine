@@ -20,7 +20,7 @@ export interface RouteDestination {
 }
 
 export interface ClassificationSignal {
-    type: 'explicit_phrase' | 'associated_person' | 'associated_company' | 'topic' | 'context_type';
+    type: 'explicit_phrase' | 'associated_person' | 'associated_company' | 'topic' | 'context_type' | 'weight_model_entity';
     value: string;
     weight: number;  // 0-1, how much this signal contributes
 }

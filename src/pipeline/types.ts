@@ -7,6 +7,7 @@
 
 import { ReflectionReport } from '../reflection/types';
 import { OutputPaths } from '../out/types';
+import type { WeightModelProvider } from '../weighting/provider';
 
 export type { OutputPaths };
 
@@ -30,6 +31,12 @@ export interface PipelineConfig {
     intermediateDir: string;
     keepIntermediates: boolean;
     processedDirectory?: string;
+    
+    // Optional: Entity affinity graph for LLM prepositioning
+    weightModelProvider?: WeightModelProvider;
+    
+    // Optional: Callback for weight model updates after transcript processing
+    onTranscriptEntitiesUpdated?: (transcriptUuid: string, entityIds: string[], projectId?: string) => void;
 }
 
 export interface ProgressInfo {

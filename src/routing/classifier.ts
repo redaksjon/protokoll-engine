@@ -16,13 +16,17 @@ import {
     RoutingContext 
 } from './types';
 import * as Context from '@redaksjon/context';
+import type { WeightModelProvider } from '../weighting/provider';
 
 export interface ClassifierInstance {
     classify(context: RoutingContext, routes: ProjectRoute[]): ClassificationResult[];
     calculateConfidence(signals: ClassificationSignal[]): number;
 }
 
-export const create = (contextInstance: Context.ContextInstance): ClassifierInstance => {
+export const create = (
+    contextInstance: Context.ContextInstance,
+    weightModelProvider?: WeightModelProvider
+): ClassifierInstance => {
   
     const classify = (
         routingContext: RoutingContext, 
@@ -98,6 +102,43 @@ export const create = (contextInstance: Context.ContextInstance): ClassifierInst
                     value: classification.context_type,
                     weight: 0.2,
                 });
+            }
+      
+            // 6. Weight model entity signal (purely additive)
+            // When the weight model is available, check if entities in the text
+            // match historical patterns for this project
+            if (weightModelProvider?.isAvailable()) {
+                const projectFreq = weightModelProvider.getProjectFrequencies(route.projectId);
+                if (projectFreq) {
+                    let entityMatches = 0;
+                    let totalFrequency = 0;
+          
+                    // Check each entity in the project's frequency map
+                    for (const [entityId, frequency] of Object.entries(projectFreq)) {
+                        // Try to find this entity in the context
+                        const person = contextInstance.getPerson(entityId);
+                        const project = contextInstance.getProject(entityId);
+                        const term = contextInstance.getTerm(entityId);
+                        const company = contextInstance.getCompany(entityId);
+                        const entity = person || project || term || company;
+            
+                        if (entity && normalizedText.includes(entity.name.toLowerCase())) {
+                            entityMatches++;
+                            totalFrequency += frequency;
+                        }
+                    }
+          
+                    if (entityMatches > 0) {
+                        // Cap weight at 0.4 (lower than explicit phrases, higher than topics)
+                        // Weight scales with frequency and number of matches
+                        const weight = Math.min(0.4, (totalFrequency / 100) * (entityMatches / 10));
+                        signals.push({
+                            type: 'weight_model_entity',
+                            value: `${entityMatches} entities (freq: ${totalFrequency})`,
+                            weight
+                        });
+                    }
+                }
             }
       
             // Only include if we have at least one signal

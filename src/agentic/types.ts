@@ -8,6 +8,7 @@
 import { z } from 'zod';
 import * as Context from '@redaksjon/context';
 import * as Routing from '../routing';
+import type { WeightModelProvider } from '../weighting/provider';
 
 // ============================================================================
 // Zod Schemas for Structured Outputs
@@ -91,6 +92,8 @@ export interface ToolContext {
     interactiveMode: boolean;
     // interactiveInstance?: Interactive.InteractiveInstance; // Interactive moved to protokoll-cli
     resolvedEntities?: Map<string, string>;  // Entities resolved during this session
+    /** Optional: entity affinity graph predictions for LLM prepositioning */
+    weightModelProvider?: WeightModelProvider;
 }
 
 export interface ToolResult {
