@@ -28,6 +28,7 @@ export * as Util from './util/storage';
 export * as Media from './util/media';
 export * from './util/metadata';
 export * from './utils/entityFinder';
+export * from './util/enhancement-logger';
 
 // Re-export types and constants
 export * from './types';

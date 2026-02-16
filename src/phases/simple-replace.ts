@@ -17,6 +17,7 @@ import * as CollisionDetector from '@/util/collision-detector';
 import * as TextReplacer from '@/util/text-replacer';
 import { stringifyJSON } from '@/util/general';
 import path from 'path';
+import type { EnhancementLogger } from '@/util/enhancement-logger';
 
 /**
  * Classification/routing information for context
@@ -89,7 +90,8 @@ export interface Instance {
         transcriptionText: string,
         classification: Classification,
         interimPath: string,
-        hash: string
+        hash: string,
+        enhancementLogger?: EnhancementLogger
     ): Promise<SimpleReplaceResult>;
 }
 
@@ -162,7 +164,8 @@ export const create = (config: Config, _operator: Dreadcabinet.Operator): Instan
         transcriptionText: string,
         classification: Classification,
         interimPath: string,
-        hash: string
+        hash: string,
+        enhancementLogger?: EnhancementLogger
     ): Promise<SimpleReplaceResult> => {
         const startTime = Date.now();
 
@@ -171,6 +174,12 @@ export const create = (config: Config, _operator: Dreadcabinet.Operator): Instan
             `Classification context: project="${classification.project}", ` +
             `confidence=${classification.confidence}`
         );
+        
+        // Log phase start
+        enhancementLogger?.logStep('simple-replace', 'phase_started', {
+            project: classification.project,
+            confidence: classification.confidence,
+        });
 
         // Load database
         await loadDatabase();
@@ -214,6 +223,16 @@ export const create = (config: Config, _operator: Dreadcabinet.Operator): Instan
                     tier: 1,
                     occurrences,
                 });
+                
+                // Log each correction
+                enhancementLogger?.logStep('simple-replace', 'correction_applied', {
+                    original: mapping.soundsLike,
+                    replacement: mapping.correctText,
+                    tier: 1,
+                    occurrences,
+                    entityId: mapping.entityId,
+                    entityType: mapping.entityType,
+                });
             }
         }
 
@@ -254,6 +273,17 @@ export const create = (config: Config, _operator: Dreadcabinet.Operator): Instan
                             tier: 2,
                             occurrences,
                         });
+                        
+                        // Log each correction
+                        enhancementLogger?.logStep('simple-replace', 'correction_applied', {
+                            original: mapping.soundsLike,
+                            replacement: mapping.correctText,
+                            tier: 2,
+                            occurrences,
+                            entityId: mapping.entityId,
+                            entityType: mapping.entityType,
+                            project: classification.project,
+                        });
                     }
                 }
             }
@@ -271,6 +301,14 @@ export const create = (config: Config, _operator: Dreadcabinet.Operator): Instan
             `(Tier 1: ${stats.tier1Replacements}, Tier 2: ${stats.tier2Replacements}) ` +
             `in ${stats.processingTimeMs}ms`
         );
+        
+        // Log phase completion
+        enhancementLogger?.logStep('simple-replace', 'phase_completed', {
+            totalReplacements: stats.totalReplacements,
+            tier1Replacements: stats.tier1Replacements,
+            tier2Replacements: stats.tier2Replacements,
+            processingTimeMs: stats.processingTimeMs,
+        });
 
         // Save stats to interim file if in debug mode
         if (config.debug) {
