@@ -639,6 +639,8 @@ export interface ListTranscriptsOptions {
     endDate?: string;
     search?: string;
     projectId?: string;
+    /** Project name - used as fallback when projectId is also set (matches transcripts with project name but no projectId) */
+    project?: string;
 }
 
 export interface ListTranscriptsResult {
@@ -663,16 +665,19 @@ export const listTranscripts = async (options: ListTranscriptsOptions): Promise<
         endDate,
         search,
         projectId,
+        project,
     } = options;
     
     // Use the storage API from protokoll-format
+    // Pass projectId for UUID-based filtering; project (name) as fallback for transcripts without projectId
     const storageOptions: StorageListOptions = {
         directory,
         limit,
         offset,
         sortBy,
         search,
-        project: projectId,
+        projectId,
+        project,
         startDate,
         endDate,
     };
