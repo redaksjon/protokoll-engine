@@ -12,6 +12,7 @@ import * as yaml from 'js-yaml';
 import * as fs from 'fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import type { ContextInstance } from '@redaksjon/context';
 
 /**
  * Represents a single sounds_like mapping entry
@@ -100,6 +101,13 @@ export interface DatabaseConfig {
 
     /** Custom generic terms list */
     genericTerms?: string[];
+
+    /**
+     * An already-loaded context instance. When provided, entity data is read
+     * directly from it (covering projects, people, and terms) instead of
+     * rescanning the filesystem.
+     */
+    contextInstance?: ContextInstance;
 }
 
 /**
@@ -379,21 +387,89 @@ export const create = (config?: DatabaseConfig): Instance => {
     };
 
     /**
+     * Load all sounds_like mappings from a ContextInstance (projects, people, terms).
+     * Preferred over filesystem scanning when the context is already loaded.
+     */
+    const loadEntitiesFromContext = (ctx: ContextInstance): SoundsLikeMapping[] => {
+        const mappings: SoundsLikeMapping[] = [];
+
+        // Helper: emit one mapping per sounds_like value plus the canonical name itself.
+        // Including the name means an entity spelled correctly in the transcript is still
+        // recognised and associated as an entity reference.
+        const addMappings = (
+            name: string,
+            entityId: string,
+            entityType: 'project' | 'person' | 'term',
+            soundsLike: string[],
+            active?: boolean
+        ) => {
+            if (active === false) return;
+
+            const seen = new Set<string>();
+            const push = (raw: string) => {
+                const key = raw.toLowerCase().trim();
+                if (!key || seen.has(key)) return;
+                seen.add(key);
+                mappings.push({
+                    soundsLike: key,
+                    correctText: name,
+                    entityType,
+                    entityId,
+                    scopedToProjects: null,
+                    collisionRisk: 'none',
+                    tier: 1,
+                });
+            };
+
+            // Always include the canonical name so exact spellings are matched
+            push(name);
+            for (const sl of soundsLike) {
+                push(sl);
+            }
+        };
+
+        // Projects
+        for (const project of ctx.getAllProjects()) {
+            addMappings(project.name, project.id, 'project', project.sounds_like ?? [], project.active);
+        }
+
+        // People
+        for (const person of ctx.getAllPeople()) {
+            addMappings(person.name, person.id, 'person', person.sounds_like ?? []);
+        }
+
+        // Terms
+        for (const term of ctx.getAllTerms()) {
+            addMappings(term.name, term.id, 'term', term.sounds_like ?? []);
+        }
+
+        const projectCount = ctx.getAllProjects().filter(p => p.active !== false).length;
+        const peopleCount = ctx.getAllPeople().length;
+        const termCount = ctx.getAllTerms().length;
+        logger.info(
+            `Loaded ${mappings.length} sounds_like mappings from context instance ` +
+            `(${projectCount} projects, ${peopleCount} people, ${termCount} terms)`
+        );
+
+        return mappings;
+    };
+
+    /**
      * Load all sounds_like mappings
      */
     const load = async (): Promise<SoundsLikeDatabase> => {
         logger.info('Loading sounds_like database');
 
-        // Load from all sources
-        const projectMappings = await loadProjectsFromProtokoll();
-        // TODO: Load from people source
-        // TODO: Load from terms source
+        let allMappings: SoundsLikeMapping[];
 
-        const allMappings = [
-            ...projectMappings,
-            // ...peopleMappings,
-            // ...termMappings,
-        ];
+        if (config?.contextInstance) {
+            // Prefer context instance - covers projects, people, and terms in one pass
+            allMappings = loadEntitiesFromContext(config.contextInstance);
+        } else {
+            // Fall back to filesystem scanning (projects only)
+            const projectMappings = await loadProjectsFromProtokoll();
+            allMappings = projectMappings;
+        }
 
         database.mappings = allMappings;
 

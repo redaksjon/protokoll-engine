@@ -8,8 +8,6 @@
  * Part of the simple-replace optimization (Phase 2).
  */
 
-import * as Dreadcabinet from '@utilarium/dreadcabinet';
-import { Config } from '@/types';
 import * as Logging from '@/logging';
 import * as Storage from '@/util/storage';
 import * as SoundsLikeDatabase from '@/util/sounds-like-database';
@@ -18,6 +16,7 @@ import * as TextReplacer from '@/util/text-replacer';
 import { stringifyJSON } from '@/util/general';
 import path from 'path';
 import type { EnhancementLogger } from '@/util/enhancement-logger';
+import type { ContextInstance } from '@redaksjon/context';
 
 /**
  * Classification/routing information for context
@@ -62,6 +61,8 @@ export interface SimpleReplaceStats {
         correctText: string;
         tier: number;
         occurrences: number;
+        entityId?: string;
+        entityType?: 'project' | 'person' | 'term';
     }>;
 }
 
@@ -95,10 +96,17 @@ export interface Instance {
     ): Promise<SimpleReplaceResult>;
 }
 
+export interface SimpleReplaceConfig {
+    debug?: boolean;
+}
+
 /**
- * Create a simple-replace phase instance
+ * Create a simple-replace phase instance.
+ * Pass a `contextInstance` to load sounds_like mappings from all entity types
+ * (projects, people, terms). Without it, only project mappings from the
+ * ~/.protokoll/context/projects/ filesystem directory are loaded.
  */
-export const create = (config: Config, _operator: Dreadcabinet.Operator): Instance => {
+export const create = (config: SimpleReplaceConfig, contextInstance?: ContextInstance): Instance => {
     const logger = Logging.getLogger();
     const storage = Storage.create({ log: logger.debug });
 
@@ -118,7 +126,7 @@ export const create = (config: Config, _operator: Dreadcabinet.Operator): Instan
 
         logger.info('Loading sounds-like database for simple-replace phase');
 
-        dbInstance = SoundsLikeDatabase.create();
+        dbInstance = SoundsLikeDatabase.create({ contextInstance });
         database = await dbInstance.load();
 
         logger.info(
@@ -222,6 +230,8 @@ export const create = (config: Config, _operator: Dreadcabinet.Operator): Instan
                     correctText: mapping.correctText,
                     tier: 1,
                     occurrences,
+                    entityId: mapping.entityId,
+                    entityType: mapping.entityType,
                 });
                 
                 // Log each correction
@@ -272,6 +282,8 @@ export const create = (config: Config, _operator: Dreadcabinet.Operator): Instan
                             correctText: mapping.correctText,
                             tier: 2,
                             occurrences,
+                            entityId: mapping.entityId,
+                            entityType: mapping.entityType,
                         });
                         
                         // Log each correction

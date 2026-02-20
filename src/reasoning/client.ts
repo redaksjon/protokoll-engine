@@ -121,7 +121,8 @@ export const create = (config: ReasoningConfig): ClientInstance => {
             }
             
             const response = await getClient().chat.completions.create(
-                requestOptions as unknown as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming
+                requestOptions as unknown as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+                { timeout: 120_000 }  // 2-minute timeout per API call
             );
       
             const duration = Date.now() - startTime;
@@ -213,7 +214,8 @@ export const create = (config: ReasoningConfig): ClientInstance => {
             }
             
             const response = await getClient().chat.completions.create(
-                requestOptions as unknown as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming
+                requestOptions as unknown as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+                { timeout: 120_000 }  // 2-minute timeout per API call
             );
             
             const choice = response.choices[0];

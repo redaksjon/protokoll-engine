@@ -70,7 +70,7 @@ export async function createUploadTranscript(
     const metadata: TranscriptMetadata = {
         id: uuid,
         status: 'uploaded',
-        audioFile: params.originalFilename,
+        audioFile: params.audioFile,  // Actual filename on disk (e.g. hash.ext) for worker to locate file
         audioHash: params.audioHash,
         date: new Date(),
         title: params.title,
