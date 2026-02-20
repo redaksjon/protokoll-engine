@@ -46,7 +46,7 @@
     "@anthropic-ai/sdk": "^0.71.2",
     "@google/generative-ai": "^0.24.1",
     "@kjerneverk/riotprompt": "^1.0.6",
-    "@redaksjon/context": "^0.0.8",
+    "@redaksjon/context": "^0.0.9",
     "@redaksjon/protokoll-format": "file:../protokoll-format",
     "@utilarium/cardigantime": "^0.0.26",
     "@utilarium/dreadcabinet": "^0.0.16",
