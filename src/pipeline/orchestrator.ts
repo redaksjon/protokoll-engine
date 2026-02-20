@@ -17,8 +17,10 @@ import * as Transcription from '../transcription';
 import * as Reasoning from '../reasoning';
 import * as Agentic from '../agentic';
 import * as CompletePhase from '../phases/complete';
+import * as SimpleReplace from '../phases/simple-replace';
 import * as Logging from '../logging';
 import { randomUUID } from 'node:crypto';
+import * as path from 'node:path';
 import * as Metadata from '../util/metadata';
 
 export interface OrchestratorInstance {
@@ -125,6 +127,10 @@ export const create = async (config: OrchestratorConfig): Promise<OrchestratorIn
     });
     logger.debug('Reasoning system initialized with model: %s, reasoning level: %s', config.model, config.reasoningLevel || 'medium');
 
+    // Initialize simple-replace phase for pre-LLM entity correction via sounds_like
+    const simpleReplace = SimpleReplace.create({ debug: config.debug }, context);
+    logger.debug('Simple-replace phase initialized with context instance');
+
     // Initialize complete phase for moving files to processed directory
     // Pass outputStructure so processed files use the same directory structure as output
     const complete = config.processedDirectory 
@@ -140,7 +146,7 @@ export const create = async (config: OrchestratorConfig): Promise<OrchestratorIn
   
     // Helper to extract a human-readable title from the output path
     const extractTitleFromPath = (outputPath: string): string | undefined => {
-        const filename = outputPath.split('/').pop()?.replace('.md', '');
+        const filename = outputPath.split('/').pop()?.replace(/\.(md|pkl)$/, '');
         if (!filename) return undefined;
         
         // Remove date prefix (e.g., "27-0716-" from "27-0716-meeting-notes")
@@ -157,6 +163,12 @@ export const create = async (config: OrchestratorConfig): Promise<OrchestratorIn
     // Helper to check if a title is meaningful (not just numbers/timestamps)
     const isMeaningfulTitle = (title: string | undefined): boolean => {
         if (!title) return false;
+        // Reject UUID-like strings (hex characters separated by dashes, e.g. filenames from recordings)
+        const uuidPattern = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+        if (uuidPattern.test(title.trim())) return false;
+        // Also reject if the title starts with a UUID segment pattern (Title Case converted UUID)
+        const uuidSegmentPattern = /^[0-9a-f]{8}\s[0-9a-f]{4}\s/i;
+        if (uuidSegmentPattern.test(title.trim())) return false;
         // Check if title is mostly numbers (timestamp-like) or very short fragments
         const stripped = title.replace(/\s+/g, '');
         const numberRatio = (stripped.match(/\d/g) || []).length / stripped.length;
@@ -326,25 +338,82 @@ Rules:
                 model: config.transcriptionModel,
                 duration: whisperDuration,
             });
+
+            // Step 4b: Simple-replace phase — sounds_like entity correction before LLM
+            // Matches entity names (projects, people, terms) using sounds_like mappings,
+            // corrects them in the transcript text, and tracks which entities were found.
+            log('debug', 'Running simple-replace (sounds_like entity matching)...');
+            // Derive the intermediate directory from an existing intermediate file path
+            const intermediateDir = path.dirname(paths.intermediate.transcript);
+            const simpleReplaceResult = await simpleReplace.replace(
+                state.rawTranscript || '',
+                {
+                    project: routeResult.projectId ?? undefined,
+                    confidence: routeResult.confidence,
+                },
+                intermediateDir,
+                input.hash
+            );
+
+            if (simpleReplaceResult.replacementsMade) {
+                log('info',
+                    'Simple-replace: %d correction(s) applied (%d Tier-1, %d Tier-2)',
+                    simpleReplaceResult.stats.totalReplacements,
+                    simpleReplaceResult.stats.tier1Replacements,
+                    simpleReplaceResult.stats.tier2Replacements
+                );
+                // Write the corrected text to intermediate for inspection
+                await output.writeIntermediate(paths, 'session', {
+                    simpleReplace: {
+                        replacementsMade: true,
+                        stats: simpleReplaceResult.stats,
+                    },
+                });
+            } else {
+                log('debug', 'Simple-replace: no replacements made');
+            }
+
+            // Notify caller (e.g. worker) so it can write to the PKL enhancement log
+            input.onSimpleReplaceComplete?.(simpleReplaceResult.stats);
+
+            // Collect pre-identified entities from simple-replace applied mappings
+            const preIdentifiedEntities: Agentic.ToolContext['preIdentifiedEntities'] = {
+                people: new Set<string>(),
+                projects: new Set<string>(),
+                terms: new Set<string>(),
+                companies: new Set<string>(),
+            };
+            for (const mapping of simpleReplaceResult.stats.appliedMappings) {
+                if (!mapping.entityId || !mapping.entityType) continue;
+                if (mapping.entityType === 'person') preIdentifiedEntities.people.add(mapping.entityId);
+                else if (mapping.entityType === 'project') preIdentifiedEntities.projects.add(mapping.entityId);
+                else if (mapping.entityType === 'term') preIdentifiedEntities.terms.add(mapping.entityId);
+                else if (mapping.entityType === 'company') preIdentifiedEntities.companies.add(mapping.entityId);
+            }
       
             // Step 5: Agentic enhancement using real executor
+            // The LLM receives the already-corrected text (simple-replace output)
+            // and is told which entities were pre-matched so it doesn't re-lookup them.
             log('info', 'Enhancing with %s...', config.model);
             
             const agenticStart = Date.now();
             const toolContext: Agentic.ToolContext = {
-                transcriptText: state.rawTranscript || '',
+                transcriptText: simpleReplaceResult.text,
                 audioDate: input.creation,
                 sourceFile: input.audioFile,
                 contextInstance: context,
                 routingInstance: routing,
+                preIdentifiedEntities,
                 interactiveMode: config.interactive,
                 // Interactive moved to protokoll-cli
                 // interactiveInstance: interactive,
                 weightModelProvider: config.weightModelProvider,
+                onToolCallStart: input.onToolCallStart,
+                onToolCallComplete: input.onToolCallComplete,
             };
             
             const executor = Agentic.create(reasoning, toolContext);
-            const agenticResult = await executor.process(state.rawTranscript || '');
+            const agenticResult = await executor.process(simpleReplaceResult.text);
             
             state.enhancedText = agenticResult.enhancedText;
             const toolsUsed = agenticResult.toolsUsed;
@@ -429,6 +498,8 @@ Rules:
 
             // Step 6: Write final output using Output module with metadata
             log('debug', 'Writing final transcript...');
+            let finalTitle: string | undefined;
+            let finalEntities: Metadata.TranscriptMetadata['entities'] | undefined;
             if (state.enhancedText) {
                 // Build entity metadata from referenced entities
                 const buildEntityReferences = (): Metadata.TranscriptMetadata['entities'] => {
@@ -524,7 +595,7 @@ Rules:
                     id: transcriptUuid,
                     title,
                     projectId: routeResult.projectId || undefined,
-                    project: routeResult.projectId || undefined,
+                    project: routeResult.projectId ? (context.getProject(routeResult.projectId)?.name || undefined) : undefined,
                     date: input.creation,
                     routing: Metadata.createRoutingMetadata(routeResult),
                     tags: Metadata.extractTagsFromSignals(routeResult.signals),
@@ -533,6 +604,8 @@ Rules:
                 };
                 
                 await output.writeTranscript(paths, state.enhancedText, transcriptMetadata);
+                finalTitle = title;
+                finalEntities = transcriptMetadata.entities;
                 
                 // Notify weight model of entity updates (if callback provided)
                 if (config.onTranscriptEntitiesUpdated && transcriptMetadata.entities) {
@@ -618,8 +691,11 @@ Rules:
                 outputPath: paths.final,
                 enhancedText: state.enhancedText || '',
                 rawTranscript: state.rawTranscript || '',
+                title: finalTitle || '',
                 routedProject: routeResult.projectId,
+                routedProjectName: routeResult.projectId ? (context.getProject(routeResult.projectId)?.name || null) : null,
                 routingConfidence: routeResult.confidence,
+                entities: finalEntities,
                 processingTime,
                 toolsUsed,
                 correctionsApplied: agenticResult.state.resolvedEntities.size,

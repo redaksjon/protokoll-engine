@@ -83,6 +83,18 @@ export interface TranscriptionTool {
     execute: (args: any) => Promise<ToolResult>;
 }
 
+/**
+ * Record of a single tool call made during enhancement
+ */
+export interface ToolCallLogEntry {
+    tool: string;
+    input: Record<string, unknown>;
+    output: unknown;
+    durationMs: number;
+    success: boolean;
+    timestamp: Date;
+}
+
 export interface ToolContext {
     transcriptText: string;
     audioDate: Date;
@@ -94,6 +106,21 @@ export interface ToolContext {
     resolvedEntities?: Map<string, string>;  // Entities resolved during this session
     /** Optional: entity affinity graph predictions for LLM prepositioning */
     weightModelProvider?: WeightModelProvider;
+    /** Optional: called just before a tool executes — enables incremental status writes */
+    onToolCallStart?: (tool: string, input: Record<string, unknown>) => void;
+    /** Optional: called after a tool completes — enables incremental log writes */
+    onToolCallComplete?: (entry: ToolCallLogEntry) => void;
+    /**
+     * Entities pre-identified by the simple-replace phase before LLM enhancement.
+     * These are seeded into referencedEntities so they show up in the transcript
+     * metadata even if the LLM doesn't redundantly look them up again.
+     */
+    preIdentifiedEntities?: {
+        people: Set<string>;
+        projects: Set<string>;
+        terms: Set<string>;
+        companies: Set<string>;
+    };
 }
 
 export interface ToolResult {

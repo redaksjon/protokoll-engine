@@ -8,8 +8,10 @@
 import { ReflectionReport } from '../reflection/types';
 import { OutputPaths } from '../out/types';
 import type { WeightModelProvider } from '../weighting/provider';
+import type { ToolCallLogEntry } from '../agentic/types';
+import type { SimpleReplaceStats } from '../phases/simple-replace';
 
-export type { OutputPaths };
+export type { OutputPaths, SimpleReplaceStats };
 
 export interface PipelineConfig {
     // Model settings
@@ -49,7 +51,19 @@ export interface PipelineInput {
     creation: Date;
     hash: string;
     progress?: ProgressInfo;
+    /** Called just before each tool executes — enables incremental PKL status writes */
+    onToolCallStart?: (tool: string, input: Record<string, unknown>) => void;
+    /** Called after each tool completes — enables incremental PKL log writes */
+    onToolCallComplete?: (entry: ToolCallLogEntry) => void;
+    /**
+     * Called after the simple-replace phase completes.
+     * Lets callers (e.g. the transcription worker) write the corrections to the
+     * PKL enhancement log so they appear on the Enhancement tab.
+     */
+    onSimpleReplaceComplete?: (stats: SimpleReplaceStats) => void;
 }
+
+export type { ToolCallLogEntry };
 
 export interface PipelineResult {
     // Core output
@@ -59,9 +73,21 @@ export interface PipelineResult {
     // Raw data
     rawTranscript: string;
   
+    // Title derived from path or LLM
+    title: string;
+
     // Routing info
     routedProject: string | null;
+    routedProjectName: string | null;
     routingConfidence: number;
+
+    // Entity references detected during processing (people, projects, terms, companies)
+    entities?: {
+        people?: Array<{ id: string; name: string; type: 'person' | 'project' | 'term' | 'company' }>;
+        projects?: Array<{ id: string; name: string; type: 'person' | 'project' | 'term' | 'company' }>;
+        terms?: Array<{ id: string; name: string; type: 'person' | 'project' | 'term' | 'company' }>;
+        companies?: Array<{ id: string; name: string; type: 'person' | 'project' | 'term' | 'company' }>;
+    };
   
     // Processing metrics
     processingTime: number;

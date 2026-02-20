@@ -5,7 +5,7 @@
  * Uses RiotPrompt's ConversationBuilder for conversation management.
  */
 
-import { ToolContext, TranscriptionState } from './types';
+import { ToolCallLogEntry, ToolContext, TranscriptionState } from './types';
 import * as Registry from './registry';
 import * as Reasoning from '../reasoning';
 import * as Logging from '../logging';
@@ -50,9 +50,18 @@ const toRiotToolCalls = (toolCalls: Array<{ id: string; name: string; arguments:
  * that should never appear in the user-facing transcript.
  */
 const cleanResponseContent = (content: string): string => {
+    let cleaned = content;
+
+    // Strip markdown code fences - LLMs often wrap output in ```markdown ... ```
+    // This avoids "markdown" appearing as the first line of the transcript
+    cleaned = cleaned.replace(/^```\s*(?:markdown|md|txt)?\s*\r?\n?/i, '');
+    cleaned = cleaned.replace(/\r?\n?```\s*$/m, '');
+    // Remove orphaned "markdown" line (can occur when AI uses ``` on separate line from language tag)
+    cleaned = cleaned.replace(/^\s*markdown\s*\r?\n/i, '');
+
     // Remove common patterns of leaked internal processing
     // Pattern 1: "Using tools to..." type commentary
-    let cleaned = content.replace(/^(?:Using tools?|Let me|I'll|I will|Now I'll|First,?\s*I(?:'ll| will)).*?[\r\n]+/gim, '');
+    cleaned = cleaned.replace(/^(?:Using tools?|Let me|I'll|I will|Now I'll|First,?\s*I(?:'ll| will)).*?[\r\n]+/gim, '');
     
     // Pattern 2: JSON tool call artifacts - match complete JSON objects with "tool" key
     // Matches: {"tool":"...","args":{...}}, {"tool":"...","input":{...}}, etc.
@@ -122,18 +131,36 @@ export const create = (
 ): ExecutorInstance => {
     const logger = Logging.getLogger();
     const registry = Registry.create(ctx);
+
+    const logCleaningWarnings = (original: string, cleaned: string, label: string): void => {
+        if (cleaned === original) return;
+        const removedChars = original.length - cleaned.length;
+        logger.warn('Removed leaked internal processing from %s (%d -> %d chars, removed %d chars)',
+            label, original.length, cleaned.length, removedChars);
+        const corruptionRatio = removedChars / original.length;
+        const hasSuspiciousUnicode = /[\u0530-\u058F\u0E00-\u0E7F\u4E00-\u9FFF\u0A80-\u0AFF\u0C00-\u0C7F]/.test(original);
+        if (corruptionRatio > 0.1 || hasSuspiciousUnicode) {
+            logger.error('SEVERE CORRUPTION DETECTED in LLM %s (%.1f%% removed, suspicious unicode: %s)',
+                label, corruptionRatio * 100, hasSuspiciousUnicode);
+            logger.error('Raw preview (first 500 chars): %s',
+                original.substring(0, 500).replace(/\n/g, '\\n'));
+        }
+    };
   
     const process = async (transcriptText: string) => {
+        // Seed referencedEntities from pre-identified entities (from simple-replace phase)
+        // so they appear in the transcript metadata even if the LLM doesn't re-look them up.
+        const pre = ctx.preIdentifiedEntities;
         const state: TranscriptionState = {
             originalText: transcriptText,
             correctedText: transcriptText,
             unknownEntities: [],
             resolvedEntities: new Map(),
             referencedEntities: {
-                people: new Set(),
-                projects: new Set(),
-                terms: new Set(),
-                companies: new Set(),
+                people: pre?.people ? new Set(pre.people) : new Set(),
+                projects: pre?.projects ? new Set(pre.projects) : new Set(),
+                terms: pre?.terms ? new Set(pre.terms) : new Set(),
+                companies: pre?.companies ? new Set(pre.companies) : new Set(),
             },
             confidence: 0,
         };
@@ -145,7 +172,7 @@ export const create = (
         const contextChanges: ContextChangeRecord[] = [];
         let iterations = 0;
         let totalTokens = 0;
-        const maxIterations = 15;
+        const maxIterations = 20;
     
         // Use ConversationBuilder for conversation management with token budget
         const conversation = ConversationBuilder.create({ model: 'gpt-4o' })
@@ -170,34 +197,47 @@ export const create = (
             : { likelyEntities: [], guidance: '' };
 
         // Build the system prompt
-        let systemPrompt = `You are an intelligent transcription assistant. Your job is to:
-1. Analyze the transcript for names, projects, and companies
-2. Use the available tools to verify spellings and gather context
-3. Correct any misheard names or terms
-4. Determine the appropriate destination for this note
-5. Produce a clean, accurate Markdown transcript
+        let systemPrompt = `You are a light-touch transcription enhancer. You clean up raw voice transcripts with minimal changes — the output should read very close to the input, just better formatted.
 
-CRITICAL RULES:
-- This is NOT a summary. Preserve ALL content from the original transcript.
-- Only fix obvious transcription errors like misheard names.
-- When you have finished processing, output the COMPLETE corrected transcript as Markdown.
-- Do NOT say you don't have the transcript - it's in the conversation history.
+## Your job:
+1. Use the available tools to verify entity names and determine routing
+2. Lightly format the transcript for readability
+3. Preserve the speaker's words as closely as possible
 
-OUTPUT REQUIREMENTS - EXTREMELY IMPORTANT:
-- Your final response MUST contain ONLY the corrected transcript text.
-- DO NOT include any commentary like "Using tools to..." or "Let me verify...".
-- DO NOT include any explanations about what you're doing or have done.
-- DO NOT include any tool call information or JSON in your response.
-- DO NOT include any reasoning or processing notes.
-- Your output will be inserted directly into the user-facing document.
-- If you need to use tools, use them silently - don't narrate what you're doing.
+## What to do:
+- **Paragraphs**: Break the wall of text into paragraphs where the speaker shifts to a new idea or topic
+- **Headings**: Add a brief ## heading when there is a clear topic change
+- **Entity corrections**: Fix misspelled names/terms using tool lookups
+- **Light cleanup**: Remove obvious filler (um, uh) and false starts, but keep the speaker's natural phrasing otherwise
+- **Formatting**: Use bullet points only where the speaker is clearly listing items
 
-Available tools:
-- lookup_person: Find information about people (use for any name that might be misspelled)
-- lookup_project: Find project routing information  
-- verify_spelling: Ask user about unknown terms (if interactive mode)
+## What NOT to do:
+- Do NOT rewrite sentences or change the speaker's wording beyond filler removal
+- Do NOT add content, interpretation, or editorial commentary
+- Do NOT summarize or condense — the output should be approximately the same length
+- Do NOT over-structure — only add headings where topics genuinely change
+- Do NOT remove conversational asides or tangents — they are part of the content
+
+## OUTPUT REQUIREMENTS:
+- Your final response MUST contain ONLY the enhanced transcript as Markdown
+- DO NOT wrap in code blocks (no \`\`\`markdown)
+- DO NOT include commentary, explanations, or processing notes
+- DO NOT narrate tool usage — use tools silently
+- Your output goes directly into the user-facing document
+
+## Available tools:
+- lookup_person: Verify spelling of people's names
+- lookup_project: Find project routing information
+- verify_spelling: Ask about unknown terms (if interactive mode)
 - route_note: Determine where to file this note
-- store_context: Remember new information for future use`;
+- store_context: Remember new information for future use
+
+## Tool call discipline — IMPORTANT:
+- You have a budget of approximately 5–8 tool calls for the ENTIRE session
+- Call lookup_person only for names that are clearly misspelled or genuinely ambiguous
+- Call route_note exactly ONCE to determine filing destination
+- Do NOT call the same tool with the same arguments more than once
+- Once you have the key entity corrections and routing, produce the output immediately — do not keep calling tools`;
 
         // Add entity guidance if available
         if (entityGuidance.guidance) {
@@ -205,24 +245,47 @@ Available tools:
             systemPrompt += '\n\nUse this guidance to improve entity recognition, but verify entities exist in the context before referencing them.';
         }
 
+        // Inform the LLM about entities already matched by the simple-replace phase
+        if (ctx.preIdentifiedEntities) {
+            const lines: string[] = [];
+            const { preIdentifiedEntities: pre } = ctx;
+
+            for (const termId of pre.terms) {
+                const term = ctx.contextInstance.getTerm(termId);
+                if (term) lines.push(`- Term: **${term.name}** (id: ${term.id})`);
+            }
+            for (const projectId of pre.projects) {
+                const project = ctx.contextInstance.getProject(projectId);
+                if (project) lines.push(`- Project: **${project.name}** (id: ${project.id})`);
+            }
+            for (const personId of pre.people) {
+                const person = ctx.contextInstance.getPerson(personId);
+                if (person) lines.push(`- Person: **${person.name}** (id: ${person.id})`);
+            }
+            for (const companyId of pre.companies) {
+                const company = ctx.contextInstance.getCompany(companyId);
+                if (company) lines.push(`- Company: **${company.name}** (id: ${company.id})`);
+            }
+
+            if (lines.length > 0) {
+                systemPrompt += `\n\n## Pre-matched Entities\nThe following entities were identified via sounds_like matching before you received the transcript. Their names have already been corrected in the text — do NOT call lookup tools for these:\n${lines.join('\n')}`;
+            }
+        }
+
         // Add system message using ConversationBuilder
         conversation.addSystemMessage(systemPrompt);
         
         // Add the initial user message with transcript
-        const initialPrompt = `Here is the raw transcript to process:
+        const initialPrompt = `Here is a raw voice transcript to clean up:
 
 --- BEGIN TRANSCRIPT ---
 ${transcriptText}
 --- END TRANSCRIPT ---
 
-Please:
-1. Identify any names, companies, or technical terms that might be misspelled
-2. Use the lookup_person tool to verify spelling of any names you find
-3. Use route_note to determine the destination
-4. Then output the COMPLETE corrected transcript as clean Markdown
-
-CRITICAL: Your response must contain ONLY the transcript text - no commentary, no explanations, no tool information.
-Remember: preserve ALL content, only fix transcription errors.`;
+Steps:
+1. Use lookup_person for any names that might be misspelled
+2. Use route_note to determine where to file this note
+3. Then output the transcript with light formatting: paragraphs at topic shifts, a heading where topics clearly change, filler words removed. Keep the speaker's own words.`;
 
         conversation.addUserMessage(initialPrompt);
 
@@ -263,7 +326,11 @@ Remember: preserve ALL content, only fix transcription errors.`;
                 for (const toolCall of response.toolCalls) {
                     logger.debug('Executing tool: %s', toolCall.name);
                     toolsUsed.push(toolCall.name);
+
+                    // Notify caller that a tool is starting
+                    ctx.onToolCallStart?.(toolCall.name, toolCall.arguments);
         
+                    const callStart = Date.now();
                     try {
                         const result = await registry.executeTool(toolCall.name, toolCall.arguments);
                         
@@ -272,6 +339,17 @@ Remember: preserve ALL content, only fix transcription errors.`;
                         toolResults.push({ id: toolCall.id, name: toolCall.name, result: resultStr });
                         
                         logger.debug('Tool %s result: %s', toolCall.name, result.success ? 'success' : 'failed');
+
+                        // Notify caller that the tool completed
+                        const callEntry: ToolCallLogEntry = {
+                            tool: toolCall.name,
+                            input: toolCall.arguments,
+                            output: result.data ?? { success: result.success, message: result.error || 'OK' },
+                            durationMs: Date.now() - callStart,
+                            success: result.success,
+                            timestamp: new Date(),
+                        };
+                        ctx.onToolCallComplete?.(callEntry);
           
                         // Handle results that need user input
                         // Interactive functionality moved to protokoll-cli
@@ -891,6 +969,14 @@ Remember: preserve ALL content, only fix transcription errors.`;
                             name: toolCall.name, 
                             result: JSON.stringify({ error: String(error) }) 
                         });
+                        ctx.onToolCallComplete?.({
+                            tool: toolCall.name,
+                            input: toolCall.arguments,
+                            output: { error: String(error) },
+                            durationMs: Date.now() - callStart,
+                            success: false,
+                            timestamp: new Date(),
+                        });
                     }
                 }
                 
@@ -900,20 +986,32 @@ Remember: preserve ALL content, only fix transcription errors.`;
                 }
       
                 // Build continuation prompt with full context
-                const continuationPrompt = `Tool results received. Here's a reminder of your task:
+                const correctionsNote = state.resolvedEntities.size > 0
+                    ? `\nConfirmed corrections: ${Array.from(state.resolvedEntities.entries()).map(([k, v]) => `"${k}" → "${v}"`).join(', ')}`
+                    : '';
 
-ORIGINAL TRANSCRIPT (process this):
+                const toolHistory = toolsUsed.length > 0
+                    ? `\nTools called so far (do NOT repeat these): ${toolsUsed.join(', ')}`
+                    : '';
+
+                const urgencyNote = toolsUsed.length >= 8
+                    ? `\n\n🛑 STOP CALLING TOOLS. You have made ${toolsUsed.length} tool calls. Output the formatted transcript NOW — no more tool calls.`
+                    : toolsUsed.length >= 5
+                        ? `\n\n⚠️ You have made ${toolsUsed.length} tool calls. Make at most 1–2 more critical lookups, then output immediately.`
+                        : '';
+
+                const outputInstruction = toolsUsed.length >= 8
+                    ? 'Output the formatted transcript immediately. No more tool calls.'
+                    : 'If you have 1–2 remaining critical lookups, do them now. Then output the lightly formatted transcript: paragraphs at topic shifts, headings where topics clearly change, filler words removed. Keep the speaker\'s own words — do not rewrite.';
+
+                const continuationPrompt = `Tool results processed (iteration ${iterations}, ${toolsUsed.length} tool calls made).${correctionsNote}${toolHistory}${urgencyNote}
+
+ORIGINAL TRANSCRIPT (you must use this):
 --- BEGIN TRANSCRIPT ---
 ${transcriptText}
 --- END TRANSCRIPT ---
 
-Corrections made so far: ${state.resolvedEntities.size > 0 ? Array.from(state.resolvedEntities.entries()).map(([k, v]) => `${k} -> ${v}`).join(', ') : 'none yet'}
-
-Continue analyzing. If you need more information, use the tools. 
-When you're done with tool calls, output the COMPLETE corrected transcript as Markdown.
-Do NOT summarize - include ALL original content with corrections applied.
-
-CRITICAL REMINDER: Your response must contain ONLY the transcript text. Do NOT include any commentary, explanations, or processing notes - those will leak into the user-facing document.`;
+${outputInstruction}`;
 
                 conversation.addUserMessage(continuationPrompt);
       
@@ -941,78 +1039,65 @@ CRITICAL REMINDER: Your response must contain ONLY the transcript text. Do NOT i
             }
     
             // Extract final corrected text
-            if (response.content && response.content.length > 50) {
-                // Clean the response to remove any leaked internal processing
-                const cleanedContent = cleanResponseContent(response.content);
-                
-                if (cleanedContent !== response.content) {
-                    const removedChars = response.content.length - cleanedContent.length;
-                    logger.warn('Removed leaked internal processing from response (%d -> %d chars, removed %d chars)',
-                        response.content.length, cleanedContent.length, removedChars);
-                    
-                    // Detect severe corruption (>10% of content removed or suspicious patterns)
-                    const corruptionRatio = removedChars / response.content.length;
-                    const hasSuspiciousUnicode = /[\u0530-\u058F\u0E00-\u0E7F\u4E00-\u9FFF\u0A80-\u0AFF\u0C00-\u0C7F]/.test(response.content);
-                    
-                    if (corruptionRatio > 0.1 || hasSuspiciousUnicode) {
-                        logger.error('SEVERE CORRUPTION DETECTED in LLM response (%.1f%% removed, suspicious unicode: %s)',
-                            corruptionRatio * 100, hasSuspiciousUnicode);
-                        logger.error('Raw response preview (first 500 chars): %s', 
-                            response.content.substring(0, 500).replace(/\n/g, '\\n'));
-                    }
+            const needsFinalRequest = !response.content || response.content.length <= 50;
+            
+            if (needsFinalRequest) {
+                if (iterations >= maxIterations) {
+                    logger.warn('Hit max iterations (%d) without final transcript — requesting explicitly (no tools)', maxIterations);
+                } else {
+                    logger.debug('Model did not produce transcript content, requesting explicitly...');
                 }
                 
-                state.correctedText = cleanedContent;
-                state.confidence = 0.9;
-                logger.debug('Final transcript generated: %d characters', cleanedContent.length);
-            } else {
-                // Model didn't produce content - ask for it explicitly
-                logger.debug('Model did not produce transcript, requesting explicitly...');
+                const correctionsBlock = state.resolvedEntities.size > 0
+                    ? Array.from(state.resolvedEntities.entries()).map(([k, v]) => `- "${k}" should be "${v}"`).join('\n')
+                    : 'None identified';
                 
-                const finalRequest = `Please output the COMPLETE corrected transcript now.
+                const finalRequest = `You have finished analyzing. Now output the lightly formatted transcript.
 
-ORIGINAL:
+ORIGINAL TRANSCRIPT:
+--- BEGIN ---
 ${transcriptText}
+--- END ---
 
 CORRECTIONS TO APPLY:
-${state.resolvedEntities.size > 0 ? Array.from(state.resolvedEntities.entries()).map(([k, v]) => `- "${k}" should be "${v}"`).join('\n') : 'None identified'}
+${correctionsBlock}
 
-Output the full transcript as clean Markdown. Do NOT summarize.
-
-CRITICAL: Your response must contain ONLY the corrected transcript text - absolutely no commentary, tool information, or explanations.`;
+Rules:
+- Break into paragraphs where the speaker shifts ideas
+- Add a ## heading only where topics clearly change
+- Remove filler words (um, uh) and false starts
+- Apply entity corrections listed above
+- Keep the speaker's own words — do not rewrite or rephrase
+- Preserve ALL content including asides and tangents
+- Output ONLY the formatted transcript`;
 
                 const finalResponse = await reasoning.complete({
                     systemPrompt,
                     prompt: finalRequest,
                 });
                 
-                // Track token usage
                 if (finalResponse.usage) {
                     totalTokens += finalResponse.usage.totalTokens;
                 }
                 
-                // Clean the final response as well
-                const cleanedFinalContent = cleanResponseContent(finalResponse.content || transcriptText);
-                
-                if (cleanedFinalContent !== finalResponse.content) {
-                    const removedChars = (finalResponse.content?.length || 0) - cleanedFinalContent.length;
-                    logger.warn('Removed leaked internal processing from final response (%d -> %d chars, removed %d chars)',
-                        finalResponse.content?.length || 0, cleanedFinalContent.length, removedChars);
-                    
-                    // Detect severe corruption
-                    const corruptionRatio = removedChars / (finalResponse.content?.length || 1);
-                    const hasSuspiciousUnicode = /[\u0530-\u058F\u0E00-\u0E7F\u4E00-\u9FFF\u0A80-\u0AFF\u0C00-\u0C7F]/.test(finalResponse.content || '');
-                    
-                    if (corruptionRatio > 0.1 || hasSuspiciousUnicode) {
-                        logger.error('SEVERE CORRUPTION DETECTED in final LLM response (%.1f%% removed, suspicious unicode: %s)',
-                            corruptionRatio * 100, hasSuspiciousUnicode);
-                        logger.error('Raw response preview (first 500 chars): %s', 
-                            (finalResponse.content || '').substring(0, 500).replace(/\n/g, '\\n'));
-                    }
+                if (finalResponse.content && finalResponse.content.length > 50) {
+                    const cleanedFinalContent = cleanResponseContent(finalResponse.content);
+                    logCleaningWarnings(finalResponse.content, cleanedFinalContent, 'final');
+                    state.correctedText = cleanedFinalContent;
+                    state.confidence = 0.8;
+                    logger.debug('Final transcript from explicit request: %d characters', cleanedFinalContent.length);
+                } else {
+                    logger.error('Enhancement FAILED: explicit request produced no content (%d chars). Falling back to raw transcript.',
+                        finalResponse.content?.length || 0);
+                    state.correctedText = transcriptText;
+                    state.confidence = 0.5;
                 }
-                
-                state.correctedText = cleanedFinalContent;
-                state.confidence = 0.8;
+            } else {
+                const cleanedContent = cleanResponseContent(response.content);
+                logCleaningWarnings(response.content, cleanedContent, 'response');
+                state.correctedText = cleanedContent;
+                state.confidence = 0.9;
+                logger.debug('Final transcript generated: %d characters', cleanedContent.length);
             }
     
         } catch (error) {

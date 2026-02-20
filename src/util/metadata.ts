@@ -470,7 +470,7 @@ export const updateStatus = (
 export const applyLifecycleDefaults = (metadata: TranscriptMetadata): TranscriptMetadata => {
     return {
         ...metadata,
-        status: metadata.status ?? 'reviewed',
+        status: metadata.status ?? 'initial',
         history: metadata.history ?? [],
         tasks: metadata.tasks ?? [],
     };

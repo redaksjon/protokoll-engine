@@ -414,7 +414,7 @@ export const combineTranscripts = async (
             projectId: targetProject?.id || baseMetadata.projectId,
             tags: baseMetadata.tags || [],
             duration: baseMetadata.duration,
-            status: 'reviewed',
+            status: 'enhanced',
         };
         
         if (targetProject) {
@@ -686,15 +686,35 @@ export const listTranscripts = async (options: ListTranscriptsOptions): Promise<
     
     // Convert storage result to operations result format
     const transcripts: TranscriptListItem[] = result.transcripts.map(item => {
-        // Extract UUID from the transcript file
         let uuid = '';
+        let entities: TranscriptListItem['entities'];
         try {
             const transcript = PklTranscript.open(item.filePath, { readOnly: true });
-            uuid = transcript.metadata.id;
+            const meta = transcript.metadata;
+            uuid = meta.id;
+            if (meta.entities) {
+                entities = {
+                    people: meta.entities.people?.map(e => ({ id: e.id, name: e.name })),
+                    projects: meta.entities.projects?.map(e => ({ id: e.id, name: e.name })),
+                    terms: meta.entities.terms?.map(e => ({ id: e.id, name: e.name })),
+                    companies: meta.entities.companies?.map(e => ({ id: e.id, name: e.name })),
+                };
+            } else if (item.project) {
+                entities = {
+                    projects: [{
+                        id: meta.projectId || item.project,
+                        name: item.project,
+                    }],
+                };
+            }
             transcript.close();
         } catch {
-            // If we can't open the file, leave uuid empty
             uuid = '';
+            if (item.project) {
+                entities = {
+                    projects: [{ id: item.project, name: item.project }],
+                };
+            }
         }
         
         return {
@@ -702,19 +722,14 @@ export const listTranscripts = async (options: ListTranscriptsOptions): Promise<
             filename: path.basename(item.filePath),
             uuid,
             date: item.date instanceof Date ? item.date.toISOString().split('T')[0] : '',
-            time: undefined, // Not in storage result
+            time: undefined,
             title: item.title,
-            hasRawTranscript: false, // Not in storage result, would need to open file to check
+            hasRawTranscript: false,
             createdAt: item.date || new Date(),
             status: item.status,
-            openTasksCount: undefined, // Not in storage result
+            openTasksCount: undefined,
             contentSize: item.contentPreview?.length,
-            entities: item.project ? {
-                projects: [{
-                    id: item.project,
-                    name: item.project,
-                }],
-            } : undefined,
+            entities,
         };
     });
     
