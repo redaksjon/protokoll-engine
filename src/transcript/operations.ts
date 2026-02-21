@@ -20,6 +20,13 @@ import {
 } from '@redaksjon/protokoll-format';
 import { ensurePklExtension } from './pkl-utils';
 
+/** UUID v4 pattern — used to detect corrupted project fields */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function looksLikeUuid(value: string): boolean {
+    return UUID_PATTERN.test(value);
+}
+
 /**
  * Parsed transcript structure
  */
@@ -692,25 +699,27 @@ export const listTranscripts = async (options: ListTranscriptsOptions): Promise<
             const transcript = PklTranscript.open(item.filePath, { readOnly: true });
             const meta = transcript.metadata;
             uuid = meta.id;
-            if (meta.entities) {
+            const mappedProjects = meta.entities?.projects?.map(e => ({ id: e.id, name: e.name }));
+            // If entities.projects is missing/empty but the scalar project field is set,
+            // synthesise a project entry so the list view can display it correctly.
+            const projectEntries = (mappedProjects && mappedProjects.length > 0)
+                ? mappedProjects
+                : (item.project && !looksLikeUuid(item.project))
+                    ? [{ id: meta.projectId || item.project, name: item.project }]
+                    : undefined;
+
+            if (meta.entities || projectEntries) {
                 entities = {
-                    people: meta.entities.people?.map(e => ({ id: e.id, name: e.name })),
-                    projects: meta.entities.projects?.map(e => ({ id: e.id, name: e.name })),
-                    terms: meta.entities.terms?.map(e => ({ id: e.id, name: e.name })),
-                    companies: meta.entities.companies?.map(e => ({ id: e.id, name: e.name })),
-                };
-            } else if (item.project) {
-                entities = {
-                    projects: [{
-                        id: meta.projectId || item.project,
-                        name: item.project,
-                    }],
+                    people: meta.entities?.people?.map(e => ({ id: e.id, name: e.name })),
+                    projects: projectEntries,
+                    terms: meta.entities?.terms?.map(e => ({ id: e.id, name: e.name })),
+                    companies: meta.entities?.companies?.map(e => ({ id: e.id, name: e.name })),
                 };
             }
             transcript.close();
         } catch {
             uuid = '';
-            if (item.project) {
+            if (item.project && !looksLikeUuid(item.project)) {
                 entities = {
                     projects: [{ id: item.project, name: item.project }],
                 };
