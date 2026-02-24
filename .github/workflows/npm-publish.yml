@@ -71,5 +71,3 @@ jobs:
       - name: Publish to npm
         if: steps.npm-tag.outputs.should_publish == 'true'
         run: npm publish --access public --tag ${{ steps.npm-tag.outputs.tag }}
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
