@@ -42,8 +42,9 @@ export const create = async (config: OrchestratorConfig): Promise<OrchestratorIn
     logger.debug('Initializing intelligent transcription pipeline...');
   
     // Initialize context system (async)
-    // Use explicit contextDirectories from config if provided (from protokoll-config.yaml)
-    const context = await Context.create({
+    // Prefer a pre-loaded context instance (required for GCS-backed storage);
+    // otherwise create one from contextDirectory/contextDirectories.
+    const context = config.contextInstance ?? await Context.create({
         startingDir: config.contextDirectory || currentWorkingDir,
         contextDirectories: config.contextDirectories,
     });
@@ -513,8 +514,8 @@ Rules:
                         companies: [],
                     };
                     
-                    // Convert sets of IDs to EntityReference arrays
                     for (const personId of refs.people) {
+                        if (!personId) continue;
                         const person = context.getPerson(personId);
                         if (person) {
                             entities.people!.push({ id: person.id, name: person.name, type: 'person' });
@@ -522,6 +523,7 @@ Rules:
                     }
                     
                     for (const projectId of refs.projects) {
+                        if (!projectId) continue;
                         const project = context.getProject(projectId);
                         if (project) {
                             entities.projects!.push({ id: project.id, name: project.name, type: 'project' });
@@ -529,6 +531,7 @@ Rules:
                     }
                     
                     for (const termId of refs.terms) {
+                        if (!termId) continue;
                         const term = context.getTerm(termId);
                         if (term) {
                             entities.terms!.push({ id: term.id, name: term.name, type: 'term' });
@@ -536,6 +539,7 @@ Rules:
                     }
                     
                     for (const companyId of refs.companies) {
+                        if (!companyId) continue;
                         const company = context.getCompany(companyId);
                         if (company) {
                             entities.companies!.push({ id: company.id, name: company.name, type: 'company' });

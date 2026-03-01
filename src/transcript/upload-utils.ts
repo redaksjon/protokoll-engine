@@ -9,7 +9,17 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { glob } from 'glob';
 import { PklTranscript } from '@redaksjon/protokoll-format';
-import type { TranscriptMetadata } from '@redaksjon/protokoll-format';
+
+type TranscriptMetadata = {
+    id: string;
+    status: 'uploaded' | 'transcribing' | 'error' | 'initial' | 'enhanced' | 'reviewed' | 'in_progress' | 'closed' | 'archived';
+    audioFile?: string;
+    audioHash?: string;
+    date?: Date;
+    title?: string;
+    project?: string;
+    errorDetails?: string;
+};
 
 /**
  * Parameters for creating an upload transcript
@@ -113,7 +123,7 @@ export async function findUploadedTranscripts(
         for (const file of files) {
             try {
                 const transcript = PklTranscript.open(file, { readOnly: true });
-                const metadata = transcript.metadata;
+                const metadata = transcript.metadata as TranscriptMetadata;
                 
                 if (metadata.status === 'uploaded') {
                     results.push({ 
@@ -160,7 +170,7 @@ export async function findTranscribingTranscripts(
         for (const file of files) {
             try {
                 const transcript = PklTranscript.open(file, { readOnly: true });
-                const metadata = transcript.metadata;
+                const metadata = transcript.metadata as TranscriptMetadata;
                 
                 if (metadata.status === 'transcribing') {
                     results.push({ 
@@ -190,7 +200,7 @@ export async function findTranscribingTranscripts(
  */
 export async function resetTranscriptToUploaded(filePath: string): Promise<void> {
     const transcript = PklTranscript.open(filePath);
-    const metadata = transcript.metadata;
+    const metadata = transcript.metadata as TranscriptMetadata;
     
     if (metadata.status === 'transcribing' || metadata.status === 'error') {
         transcript.updateMetadata({ 

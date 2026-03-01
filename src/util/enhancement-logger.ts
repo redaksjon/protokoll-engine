@@ -5,7 +5,24 @@
  * Provides a simple interface that can be passed to pipeline phases.
  */
 
-import type { EnhancementLogManager, EntityReference } from '@redaksjon/protokoll-format';
+type EntityReference = { id: string; name?: string; type?: string };
+
+interface EnhancementLogManager {
+  logStep(
+    timestamp: Date,
+    phase: 'transcribe' | 'enhance' | 'simple-replace',
+    action: string,
+    details?: Record<string, unknown>,
+    entities?: EntityReference[]
+  ): void;
+  logSteps(steps: Array<{
+    timestamp: Date;
+    phase: 'transcribe' | 'enhance' | 'simple-replace';
+    action: string;
+    details?: Record<string, unknown>;
+    entities?: EntityReference[];
+  }>): void;
+}
 
 export interface EnhancementLogger {
   logStep(
