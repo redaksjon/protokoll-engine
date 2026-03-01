@@ -1,6 +1,6 @@
 {
   "name": "@redaksjon/protokoll-engine",
-  "version": "0.1.11-dev.0",
+  "version": "0.1.11",
   "description": "Processing engine for Protokoll - transcription pipeline, agentic execution, routing, and LLM integration",
   "type": "module",
   "main": "dist/index.js",
