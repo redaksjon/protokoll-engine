@@ -8,7 +8,24 @@
 import * as path from 'node:path';
 import * as fs from 'fs/promises';
 import { PklTranscript, isUuidInput } from '@redaksjon/protokoll-format';
-import type { TranscriptMetadata as PklMetadata } from '@redaksjon/protokoll-format';
+
+type PklMetadata = {
+    date?: Date;
+    recordingTime?: string;
+    project?: string;
+    projectId?: string;
+    routing?: {
+        destination?: string;
+        confidence?: number;
+    };
+    tags?: string[];
+    duration?: string;
+    status?: string;
+    tasks?: unknown[];
+    entities?: unknown;
+    history?: unknown;
+    title?: string;
+};
 
 /**
  * Check if a file is a .pkl transcript
@@ -126,7 +143,7 @@ export async function readTranscriptContent(filePath: string): Promise<{
     const transcript = PklTranscript.open(pklPath, { readOnly: true });
     
     try {
-        const pklMetadata = transcript.metadata;
+        const pklMetadata = transcript.metadata as PklMetadata;
         return {
             content: transcript.content,
             mimeType: 'text/plain',

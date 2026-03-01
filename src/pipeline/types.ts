@@ -10,6 +10,7 @@ import { OutputPaths } from '../out/types';
 import type { WeightModelProvider } from '../weighting/provider';
 import type { ToolCallLogEntry } from '../agentic/types';
 import type { SimpleReplaceStats } from '../phases/simple-replace';
+import type { ContextInstance } from '@redaksjon/context';
 
 export type { OutputPaths, SimpleReplaceStats };
 
@@ -26,6 +27,14 @@ export interface PipelineConfig {
     dryRun?: boolean;
     silent?: boolean;  // Disable sound notifications
   
+    // Context
+    /**
+     * Pre-loaded context instance. When provided, the pipeline reuses it
+     * instead of creating a new one from contextDirectory/contextDirectories.
+     * Required when context is backed by non-filesystem storage (e.g. GCS).
+     */
+    contextInstance?: ContextInstance;
+
     // Paths
     contextDirectory?: string;
     /** Explicit context directories (from protokoll-config.yaml) */

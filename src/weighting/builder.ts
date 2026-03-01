@@ -17,9 +17,15 @@ import {
 } from './types';
 import { 
     listTranscripts, 
-    PklTranscript,
-    type TranscriptEntities 
+    PklTranscript
 } from '@redaksjon/protokoll-format';
+
+type TranscriptEntities = {
+    people?: Array<{ id: string }>;
+    projects?: Array<{ id: string }>;
+    terms?: Array<{ id: string }>;
+    companies?: Array<{ id: string }>;
+};
 
 /**
  * WeightModelBuilder
@@ -51,7 +57,11 @@ export class WeightModelBuilder {
         for (const transcriptItem of result.transcripts) {
             // Open the transcript to get full metadata including UUID
             const transcript = PklTranscript.open(transcriptItem.filePath, { readOnly: true });
-            const metadata = transcript.metadata;
+            const metadata = transcript.metadata as {
+                id: string;
+                project?: string;
+                entities?: TranscriptEntities;
+            };
             transcript.close();
 
             // Extract entity IDs from the transcript

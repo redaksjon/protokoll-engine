@@ -15,10 +15,45 @@ import { findProjectResilient } from '../utils/entityFinder';
 import { 
     PklTranscript, 
     listTranscripts as listTranscriptsFromStorage,
-    type TranscriptMetadata as PklMetadata,
-    type ListTranscriptsOptions as StorageListOptions,
 } from '@redaksjon/protokoll-format';
 import { ensurePklExtension } from './pkl-utils';
+
+type PklMetadata = {
+    id: string;
+    title?: string;
+    date?: Date;
+    recordingTime?: string;
+    project?: string;
+    projectId?: string;
+    tags?: string[];
+    duration?: string;
+    status?: TranscriptStatus;
+    routing?: {
+        destination?: string;
+        confidence?: number;
+        signals?: string[];
+        reasoning?: string;
+    };
+    entities?: {
+        people?: Array<{ id: string; name: string; type: EntityType }>;
+        projects?: Array<{ id: string; name: string; type: EntityType }>;
+        terms?: Array<{ id: string; name: string; type: EntityType }>;
+        companies?: Array<{ id: string; name: string; type: EntityType }>;
+    };
+};
+
+type TranscriptStatus =
+    | 'uploaded'
+    | 'transcribing'
+    | 'error'
+    | 'initial'
+    | 'enhanced'
+    | 'reviewed'
+    | 'in_progress'
+    | 'closed'
+    | 'archived';
+
+type EntityType = 'person' | 'project' | 'term' | 'company';
 
 /** UUID v4 pattern — used to detect corrupted project fields */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -115,7 +150,7 @@ export const parseTranscript = async (
     const transcript = PklTranscript.open(resolvedPath, { readOnly: true });
     
     try {
-        const pklMetadata = transcript.metadata;
+        const pklMetadata = transcript.metadata as PklMetadata;
         const content = transcript.content;
         
         const result: ParsedTranscript = {
@@ -470,7 +505,7 @@ export const editTranscript = async (
     const transcript = PklTranscript.open(pklPath, { readOnly: false });
     
     try {
-        const pklMetadata = transcript.metadata;
+        const pklMetadata = transcript.metadata as PklMetadata;
         const content = transcript.content;
         
         // Use explicit contextDirectories from options if provided (from protokoll-config.yaml)
@@ -626,7 +661,7 @@ export interface TranscriptListItem {
     title: string;
     hasRawTranscript: boolean;
     createdAt: Date;
-    status?: import('@redaksjon/protokoll-format').TranscriptStatus;
+    status?: TranscriptStatus;
     openTasksCount?: number;
     contentSize?: number;
     entities?: {
@@ -677,7 +712,7 @@ export const listTranscripts = async (options: ListTranscriptsOptions): Promise<
     
     // Use the storage API from protokoll-format
     // Pass projectId for UUID-based filtering; project (name) as fallback for transcripts without projectId
-    const storageOptions: StorageListOptions = {
+    const storageOptions = {
         directory,
         limit,
         offset,
@@ -697,9 +732,9 @@ export const listTranscripts = async (options: ListTranscriptsOptions): Promise<
         let entities: TranscriptListItem['entities'];
         try {
             const transcript = PklTranscript.open(item.filePath, { readOnly: true });
-            const meta = transcript.metadata;
+            const meta = transcript.metadata as PklMetadata;
             uuid = meta.id;
-            const mappedProjects = meta.entities?.projects?.map(e => ({ id: e.id, name: e.name }));
+            const mappedProjects = meta.entities?.projects?.map((e: { id: string; name: string }) => ({ id: e.id, name: e.name }));
             // If entities.projects is missing/empty but the scalar project field is set,
             // synthesise a project entry so the list view can display it correctly.
             const projectEntries = (mappedProjects && mappedProjects.length > 0)
@@ -710,10 +745,10 @@ export const listTranscripts = async (options: ListTranscriptsOptions): Promise<
 
             if (meta.entities || projectEntries) {
                 entities = {
-                    people: meta.entities?.people?.map(e => ({ id: e.id, name: e.name })),
+                    people: meta.entities?.people?.map((e: { id: string; name: string }) => ({ id: e.id, name: e.name })),
                     projects: projectEntries,
-                    terms: meta.entities?.terms?.map(e => ({ id: e.id, name: e.name })),
-                    companies: meta.entities?.companies?.map(e => ({ id: e.id, name: e.name })),
+                    terms: meta.entities?.terms?.map((e: { id: string; name: string }) => ({ id: e.id, name: e.name })),
+                    companies: meta.entities?.companies?.map((e: { id: string; name: string }) => ({ id: e.id, name: e.name })),
                 };
             }
             transcript.close();
@@ -764,8 +799,8 @@ export const listTranscripts = async (options: ListTranscriptsOptions): Promise<
  * @returns true if transition is valid, false otherwise
  */
 export function isValidStatusTransition(
-    from: import('@redaksjon/protokoll-format').TranscriptStatus | undefined,
-    to: import('@redaksjon/protokoll-format').TranscriptStatus
+    from: TranscriptStatus | undefined,
+    to: TranscriptStatus
 ): boolean {
     // If no current status, any status is valid (initial creation)
     if (!from) {
@@ -774,8 +809,8 @@ export function isValidStatusTransition(
     
     // Define valid transitions for each status
     const validTransitions: Record<
-        import('@redaksjon/protokoll-format').TranscriptStatus,
-        import('@redaksjon/protokoll-format').TranscriptStatus[]
+        TranscriptStatus,
+        TranscriptStatus[]
     > = {
         'uploaded': ['transcribing', 'error'],
         'transcribing': ['initial', 'error'],

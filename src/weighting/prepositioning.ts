@@ -8,8 +8,9 @@
 
 import { WeightModelProvider } from './provider';
 import { EntityPrediction, PredictionContext } from './types';
-import type { EntityReference } from '@redaksjon/protokoll-format';
 import * as Context from '@redaksjon/context';
+
+type EntityReference = { id: string; name?: string; type?: string };
 
 /**
  * Entity prepositioning guidance for LLM enhancement
