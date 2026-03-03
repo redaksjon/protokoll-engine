@@ -45,3 +45,4 @@ import { Pipeline, Reasoning, Routing } from '@redaksjon/protokoll-engine';
 ## License
 
 Apache-2.0
+TEST
