@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import * as Context from '@redaksjon/context';
+import type { ToolCall, ToolDefinition } from '../reasoning/types';
 import * as Routing from '../routing';
 import type { WeightModelProvider } from '../weighting/provider';
 
@@ -95,6 +96,41 @@ export interface ToolCallLogEntry {
     timestamp: Date;
 }
 
+/**
+ * Record of a single model call made during enhancement
+ */
+export interface ModelCallStartLogEntry {
+    callIndex: number;
+    phase: 'initial' | 'continuation' | 'final';
+    request: {
+        model?: string;
+        reasoningLevel?: string;
+        prompt: string;
+        systemPrompt?: string;
+        maxIterations?: number;
+        tools?: ToolDefinition[];
+    };
+    timestamp: Date;
+}
+
+export interface ModelCallCompleteLogEntry {
+    callIndex: number;
+    phase: 'initial' | 'continuation' | 'final';
+    durationMs: number;
+    response: {
+        model?: string;
+        finishReason?: string;
+        usage?: {
+            promptTokens: number;
+            completionTokens: number;
+            totalTokens: number;
+        };
+        toolCalls?: ToolCall[];
+        contentLength: number;
+    };
+    timestamp: Date;
+}
+
 export interface ToolContext {
     transcriptText: string;
     audioDate: Date;
@@ -110,6 +146,15 @@ export interface ToolContext {
     onToolCallStart?: (tool: string, input: Record<string, unknown>) => void;
     /** Optional: called after a tool completes — enables incremental log writes */
     onToolCallComplete?: (entry: ToolCallLogEntry) => void;
+    /** Optional: called just before each model call to capture request payload details */
+    onModelCallStart?: (entry: ModelCallStartLogEntry) => void;
+    /** Optional: called after each model call to capture usage/details */
+    onModelCallComplete?: (entry: ModelCallCompleteLogEntry) => void;
+    /** Optional: model metadata for observability in enhancement logs */
+    modelConfiguration?: {
+        model: string;
+        reasoningLevel?: string;
+    };
     /**
      * Entities pre-identified by the simple-replace phase before LLM enhancement.
      * These are seeded into referencedEntities so they show up in the transcript

@@ -8,7 +8,7 @@
 import { ReflectionReport } from '../reflection/types';
 import { OutputPaths } from '../out/types';
 import type { WeightModelProvider } from '../weighting/provider';
-import type { ToolCallLogEntry } from '../agentic/types';
+import type { ModelCallCompleteLogEntry, ModelCallStartLogEntry, ToolCallLogEntry } from '../agentic/types';
 import type { SimpleReplaceStats } from '../phases/simple-replace';
 import type { ContextInstance } from '@redaksjon/context';
 
@@ -64,6 +64,10 @@ export interface PipelineInput {
     onToolCallStart?: (tool: string, input: Record<string, unknown>) => void;
     /** Called after each tool completes — enables incremental PKL log writes */
     onToolCallComplete?: (entry: ToolCallLogEntry) => void;
+    /** Called just before each model call — enables model request observability */
+    onModelCallStart?: (entry: ModelCallStartLogEntry) => void;
+    /** Called after each model call — enables usage and finish-reason observability */
+    onModelCallComplete?: (entry: ModelCallCompleteLogEntry) => void;
     /**
      * Called after the simple-replace phase completes.
      * Lets callers (e.g. the transcription worker) write the corrections to the

@@ -411,6 +411,12 @@ Rules:
                 weightModelProvider: config.weightModelProvider,
                 onToolCallStart: input.onToolCallStart,
                 onToolCallComplete: input.onToolCallComplete,
+                onModelCallStart: input.onModelCallStart,
+                onModelCallComplete: input.onModelCallComplete,
+                modelConfiguration: {
+                    model: config.model,
+                    reasoningLevel: config.reasoningLevel,
+                },
             };
             
             const executor = Agentic.create(reasoning, toolContext);
