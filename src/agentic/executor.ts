@@ -5,7 +5,13 @@
  * Uses RiotPrompt's ConversationBuilder for conversation management.
  */
 
-import { ToolCallLogEntry, ToolContext, TranscriptionState } from './types';
+import {
+    ModelCallCompleteLogEntry,
+    ModelCallStartLogEntry,
+    ToolCallLogEntry,
+    ToolContext,
+    TranscriptionState,
+} from './types';
 import * as Registry from './registry';
 import * as Reasoning from '../reasoning';
 import * as Logging from '../logging';
@@ -173,6 +179,7 @@ export const create = (
         let iterations = 0;
         let totalTokens = 0;
         const maxIterations = 20;
+        let modelCallIndex = 0;
     
         // Use ConversationBuilder for conversation management with token budget
         const conversation = ConversationBuilder.create({ model: 'gpt-4o' })
@@ -289,10 +296,59 @@ Steps:
 
         conversation.addUserMessage(initialPrompt);
 
+        const callModel = async (
+            phase: 'initial' | 'continuation' | 'final',
+            request: {
+                systemPrompt: string;
+                prompt: string;
+                tools?: ReturnType<typeof registry.getToolDefinitions>;
+                maxIterations?: number;
+            },
+        ) => {
+            modelCallIndex++;
+            const startEntry: ModelCallStartLogEntry = {
+                callIndex: modelCallIndex,
+                phase,
+                request: {
+                    model: ctx.modelConfiguration?.model,
+                    reasoningLevel: ctx.modelConfiguration?.reasoningLevel,
+                    prompt: request.prompt,
+                    systemPrompt: request.systemPrompt,
+                    maxIterations: request.maxIterations,
+                    tools: request.tools,
+                },
+                timestamp: new Date(),
+            };
+            ctx.onModelCallStart?.(startEntry);
+
+            const started = Date.now();
+            const response = await reasoning.complete({
+                systemPrompt: request.systemPrompt,
+                prompt: request.prompt,
+                tools: request.tools,
+                maxIterations: request.maxIterations,
+            });
+            const completeEntry: ModelCallCompleteLogEntry = {
+                callIndex: modelCallIndex,
+                phase,
+                durationMs: Date.now() - started,
+                response: {
+                    model: response.model,
+                    finishReason: response.finishReason,
+                    usage: response.usage,
+                    toolCalls: response.toolCalls,
+                    contentLength: response.content?.length ?? 0,
+                },
+                timestamp: new Date(),
+            };
+            ctx.onModelCallComplete?.(completeEntry);
+            return response;
+        };
+
         try {
             // Initial reasoning call
             logger.debug('Starting agentic transcription - analyzing for names and routing...');
-            let response = await reasoning.complete({
+            let response = await callModel('initial', {
                 systemPrompt,
                 prompt: initialPrompt,
                 tools: registry.getToolDefinitions(),
@@ -1016,7 +1072,7 @@ ${outputInstruction}`;
                 conversation.addUserMessage(continuationPrompt);
       
                 // Continue conversation with full context
-                response = await reasoning.complete({
+                response = await callModel('continuation', {
                     systemPrompt,
                     prompt: continuationPrompt,
                     tools: registry.getToolDefinitions(),
@@ -1071,7 +1127,7 @@ Rules:
 - Preserve ALL content including asides and tangents
 - Output ONLY the formatted transcript`;
 
-                const finalResponse = await reasoning.complete({
+                const finalResponse = await callModel('final', {
                     systemPrompt,
                     prompt: finalRequest,
                 });
