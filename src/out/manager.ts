@@ -175,7 +175,9 @@ export const create = (config: OutputConfig): ManagerInstance => {
             status: 'initial' as const,
         };
         
-        const transcript = PklTranscript.create(paths.final, pklMetadata);
+        // Compatibility cast: engine metadata can include newer statuses than
+        // the currently installed protokoll-format type declarations.
+        const transcript = PklTranscript.create(paths.final, pklMetadata as any);
         try {
             transcript.updateContent(content);
             logger.info('Wrote final transcript', { path: paths.final });

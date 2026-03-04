@@ -12,8 +12,9 @@ import * as Routing from '@/routing';
  * - in_progress: Has outstanding tasks to complete
  * - closed: All work complete, no pending tasks
  * - archived: Archived for long-term storage
+ * - deleted: Soft-delete marker (not physically removed)
  */
-export type TranscriptStatus = 'initial' | 'enhanced' | 'reviewed' | 'in_progress' | 'closed' | 'archived';
+export type TranscriptStatus = 'initial' | 'enhanced' | 'reviewed' | 'in_progress' | 'closed' | 'archived' | 'deleted';
 
 /**
  * Record of a status transition with timestamp
@@ -404,7 +405,7 @@ export const extractTagsFromSignals = (signals: Routing.ClassificationSignal[]):
  * Valid transcript statuses for validation
  */
 export const VALID_STATUSES: TranscriptStatus[] = [
-    'initial', 'enhanced', 'reviewed', 'in_progress', 'closed', 'archived'
+    'initial', 'enhanced', 'reviewed', 'in_progress', 'closed', 'archived', 'deleted'
 ];
 
 /**
