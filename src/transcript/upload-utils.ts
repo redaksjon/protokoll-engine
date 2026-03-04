@@ -12,8 +12,9 @@ import { PklTranscript } from '@redaksjon/protokoll-format';
 
 type TranscriptMetadata = {
     id: string;
-    status: 'uploaded' | 'transcribing' | 'error' | 'initial' | 'enhanced' | 'reviewed' | 'in_progress' | 'closed' | 'archived';
+    status: 'uploaded' | 'transcribing' | 'error' | 'initial' | 'enhanced' | 'reviewed' | 'in_progress' | 'closed' | 'archived' | 'deleted';
     audioFile?: string;
+    originalFilename?: string;
     audioHash?: string;
     date?: Date;
     title?: string;
@@ -81,13 +82,15 @@ export async function createUploadTranscript(
         id: uuid,
         status: 'uploaded',
         audioFile: params.audioFile,  // Actual filename on disk (e.g. hash.ext) for worker to locate file
+        originalFilename: params.originalFilename,
         audioHash: params.audioHash,
         date: new Date(),
         title: params.title,
         project: params.project,
     };
   
-    const transcript = PklTranscript.create(filePath, metadata);
+    // Compatibility cast: upload workflow uses extended lifecycle statuses.
+    const transcript = PklTranscript.create(filePath, metadata as any);
     await transcript.close();
   
     return { uuid, filePath };
@@ -100,6 +103,43 @@ export interface UploadedTranscript {
   uuid: string;
   filePath: string;
   metadata: TranscriptMetadata;
+}
+
+/**
+ * Find an existing transcript by audio hash
+ *
+ * Scans PKL files recursively so duplicates can still be found after
+ * transcripts are moved out of the upload UUID filename format.
+ */
+export async function findTranscriptByAudioHash(
+    audioHash: string,
+    searchDirectories: string[]
+): Promise<UploadedTranscript | null> {
+    for (const dir of searchDirectories) {
+        const files = await glob('**/*.pkl', { cwd: dir, absolute: true, nodir: true });
+
+        for (const file of files) {
+            try {
+                const transcript = PklTranscript.open(file, { readOnly: true });
+                const metadata = transcript.metadata as TranscriptMetadata;
+
+                if (metadata.audioHash === audioHash && metadata.id) {
+                    await transcript.close();
+                    return {
+                        uuid: metadata.id,
+                        filePath: file,
+                        metadata,
+                    };
+                }
+
+                await transcript.close();
+            } catch {
+                // Ignore unreadable/corrupt transcripts during duplicate scan.
+            }
+        }
+    }
+
+    return null;
 }
 
 /**

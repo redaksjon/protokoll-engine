@@ -51,7 +51,8 @@ type TranscriptStatus =
     | 'reviewed'
     | 'in_progress'
     | 'closed'
-    | 'archived';
+    | 'archived'
+    | 'deleted';
 
 type EntityType = 'person' | 'project' | 'term' | 'company';
 
@@ -472,7 +473,9 @@ export const combineTranscripts = async (
             };
         }
         
-        const newTranscript = PklTranscript.create(outputPath, initialMetadata);
+        // Compatibility cast: engine metadata can include newer statuses than
+        // the currently installed protokoll-format type declarations.
+        const newTranscript = PklTranscript.create(outputPath, initialMetadata as any);
         try {
             newTranscript.updateContent(combinedContent);
         } finally {
@@ -619,7 +622,8 @@ export const editTranscript = async (
         // Apply updates
         if (!options.dryRun) {
             if (Object.keys(updatedMetadata).length > 0) {
-                transcript.updateMetadata(updatedMetadata);
+                // Compatibility cast: see status type drift note above.
+                transcript.updateMetadata(updatedMetadata as any);
             }
             
             // If output path changed, we need to move the file
@@ -819,8 +823,9 @@ export function isValidStatusTransition(
         'enhanced': ['reviewed', 'in_progress', 'error'],
         'reviewed': ['closed', 'in_progress', 'error'],
         'in_progress': ['initial', 'enhanced', 'reviewed', 'closed', 'error'],
-        'closed': ['archived', 'in_progress', 'error'],
-        'archived': ['closed', 'error'], // Allow un-archiving
+        'closed': ['archived', 'deleted', 'in_progress', 'error'],
+        'archived': ['closed', 'deleted', 'error'], // Allow un-archiving
+        'deleted': ['archived', 'closed', 'error'], // Allow soft-restore
     };
     
     return validTransitions[from]?.includes(to) ?? false;
