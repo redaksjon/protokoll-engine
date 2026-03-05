@@ -22,6 +22,7 @@ type PklMetadata = {
     duration?: string;
     status?: string;
     tasks?: unknown[];
+    comments?: unknown[];
     entities?: unknown;
     history?: unknown;
     title?: string;
@@ -174,6 +175,7 @@ export function convertPklMetadataToLegacy(
         duration: pklMetadata.duration,
         status: pklMetadata.status,
         tasks: pklMetadata.tasks,
+        comments: pklMetadata.comments,
         entities: pklMetadata.entities,
         history: pklMetadata.history,
     };
