@@ -180,9 +180,10 @@ export const create = (
         let totalTokens = 0;
         const maxIterations = 20;
         let modelCallIndex = 0;
+        const activeModel = ctx.modelConfiguration?.model || 'gpt-4o';
     
         // Use ConversationBuilder for conversation management with token budget
-        const conversation = ConversationBuilder.create({ model: 'gpt-4o' })
+        const conversation = ConversationBuilder.create({ model: activeModel })
             .withTokenBudget({
                 max: 100000,                    // 100k token context window
                 reserveForResponse: 4000,       // Reserve 4k tokens for response
