@@ -47,6 +47,27 @@ export interface ClientInstance {
 
 export const create = (config: ReasoningConfig): ClientInstance => {
     const logger = Logging.getLogger();
+
+    const parseToolArguments = (toolName: string, rawArguments: string): Record<string, unknown> => {
+        try {
+            const parsed = JSON.parse(rawArguments) as unknown;
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                return parsed as Record<string, unknown>;
+            }
+            logger.warn('Tool arguments JSON was not an object; falling back to empty args', {
+                tool: toolName,
+                rawPreview: rawArguments.slice(0, 200),
+            });
+            return {};
+        } catch (error) {
+            logger.warn('Failed to parse tool arguments; falling back to empty args', {
+                tool: toolName,
+                error: error instanceof Error ? error.message : String(error),
+                rawPreview: rawArguments.slice(0, 200),
+            });
+            return {};
+        }
+    };
     
     // Lazy-initialize OpenAI client (only when actually needed)
     let client: OpenAI | null = null;
@@ -148,7 +169,7 @@ export const create = (config: ReasoningConfig): ClientInstance => {
                 return {
                     id: tc.id,
                     name: fn.name,
-                    arguments: JSON.parse(fn.arguments),
+                    arguments: parseToolArguments(fn.name, fn.arguments),
                 };
             });
       
