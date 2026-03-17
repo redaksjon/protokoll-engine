@@ -83,6 +83,7 @@ export const create = (logger: Logger): Media => {
             const outputFiles: string[] = [];
             const fileExt = path.extname(filePath);
             const fileName = path.basename(filePath, fileExt);
+            let completedSegments = 0;
 
             // Create a promise for each segment
             const promises = [];
@@ -91,6 +92,7 @@ export const create = (logger: Logger): Media => {
                 const startTime = i * segmentDuration;
                 const outputPath = path.join(outputDir, `${fileName}_part${i + 1}${fileExt}`);
                 outputFiles.push(outputPath);
+                logger.info(`Splitting audio segment ${i + 1}/${segmentCount}...`);
 
                 const promise = new Promise<void>((resolve, reject) => {
                     ffmpeg(filePath)
@@ -98,6 +100,8 @@ export const create = (logger: Logger): Media => {
                         .setDuration(segmentDuration)
                         .output(outputPath)
                         .on('end', () => {
+                            completedSegments += 1;
+                            logger.info(`Split progress: ${completedSegments}/${segmentCount} segments ready`);
                             logger.debug(`Created segment ${i + 1}/${segmentCount}: ${outputPath}`);
                             resolve();
                         })
