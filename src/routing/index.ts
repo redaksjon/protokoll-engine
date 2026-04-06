@@ -12,7 +12,7 @@
 import { RoutingConfig, RouteDecision, RoutingContext, RouteDestination, ProjectRoute } from './types';
 import * as Router from './router';
 import * as Classifier from './classifier';
-import * as Context from '../context';
+import * as Context from '@redaksjon/context';
 
 export interface RoutingInstance {
     route(context: RoutingContext): RouteDecision;

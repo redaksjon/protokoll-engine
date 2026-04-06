@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import * as Context from '../context';
+import * as Context from '@redaksjon/context';
 import * as Routing from '../routing';
 
 // ============================================================================

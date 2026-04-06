@@ -5,6 +5,7 @@
  */
 
 import { TranscriptionTool, ToolContext, ToolResult } from '../types';
+import type { RedaksjonEntity, Project } from '@redaksjon/context';
 
 /**
  * Extract context from transcript around where a name is mentioned.
@@ -128,7 +129,7 @@ export const create = (ctx: ToolContext): TranscriptionTool => ({
     
         // Try direct name search
         const people = context.search(args.name);
-        const personMatches = people.filter(e => e.type === 'person');
+        const personMatches = people.filter((e: RedaksjonEntity) => e.type === 'person');
     
         if (personMatches.length > 0) {
             return {
@@ -160,8 +161,8 @@ export const create = (ctx: ToolContext): TranscriptionTool => ({
         // The executor will decide whether to actually prompt based on handler availability
         const allProjects = context.getAllProjects();
         const projectOptions = allProjects
-            .filter(p => p.active !== false)
-            .map(p => `${p.name}${p.description ? ` - ${p.description}` : ''}`);
+            .filter((p: Project) => p.active !== false)
+            .map((p: Project) => `${p.name}${p.description ? ` - ${p.description}` : ''}`);
         
         // Extract filename from sourceFile path for cleaner display
         const fileName = ctx.sourceFile.split('/').pop() || ctx.sourceFile;
@@ -199,7 +200,7 @@ export const create = (ctx: ToolContext): TranscriptionTool => ({
                 clarificationType: 'new_person',
                 term: args.name,
                 message: `Person "${args.name}" not found. Asking user for details.`,
-                knownProjects: allProjects.filter(p => p.active !== false),
+                knownProjects: allProjects.filter((p: Project) => p.active !== false),
                 options: projectOptions,
             },
         };

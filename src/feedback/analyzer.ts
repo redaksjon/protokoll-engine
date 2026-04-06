@@ -7,7 +7,8 @@
 
 import { ClassificationFeedback, FeedbackAnalysis, LearningUpdate } from './types';
 import * as Reasoning from '../reasoning';
-import * as Context from '../context';
+import * as Context from '@redaksjon/context';
+import type { Project } from '@redaksjon/context';
 import * as Logging from '../logging';
 
 export interface AnalyzerInstance {
@@ -32,7 +33,7 @@ export const create = (
 
         // Gather current context for the model to understand
         const allProjects = context.getAllProjects();
-        const projectSummary = allProjects.map(p => ({
+        const projectSummary = allProjects.map((p: Project) => ({
             id: p.id,
             name: p.name,
             phrases: p.classification?.explicit_phrases || [],

@@ -15,7 +15,7 @@ import {
     ProjectRoute, 
     RoutingContext 
 } from './types';
-import * as Context from '../context';
+import * as Context from '@redaksjon/context';
 
 export interface ClassifierInstance {
     classify(context: RoutingContext, routes: ProjectRoute[]): ClassificationResult[];

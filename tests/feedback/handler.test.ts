@@ -37,6 +37,9 @@ vi.mock('readline', () => ({
     createInterface: vi.fn(() => mockRl),
 }));
 
+// Spy on console.log before importing handler (it captures console.log at module load time)
+const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
 // Import after mocking
 const { create } = await import('../../src/feedback/handler');
 
@@ -213,7 +216,7 @@ describe('Feedback Handler', () => {
 
             await handler.collectFeedback(createMockDecision({ projectId: null }));
 
-            const logCalls = vi.mocked(console.log).mock.calls.flat().join(' ');
+            const logCalls = consoleLogSpy.mock.calls.flat().join(' ');
             expect(logCalls).toContain('(default)');
         });
     });
@@ -441,7 +444,7 @@ describe('Feedback Handler', () => {
             const applied = await handler.reviewAndApply(analysis);
 
             expect(applied).toEqual([]);
-            const logCalls = vi.mocked(console.log).mock.calls.flat().join(' ');
+            const logCalls = consoleLogSpy.mock.calls.flat().join(' ');
             expect(logCalls).toContain('Editing not yet implemented');
         });
 
@@ -485,7 +488,7 @@ describe('Feedback Handler', () => {
             const analysis = createAnalysisWithUpdates([update]);
             await handler.reviewAndApply(analysis);
 
-            const logCalls = vi.mocked(console.log).mock.calls.flat().join(' ');
+            const logCalls = consoleLogSpy.mock.calls.flat().join(' ');
             expect(logCalls).toContain('explicit_phrases');
             expect(logCalls).toContain('hello');
         });

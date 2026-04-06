@@ -6,6 +6,7 @@
  */
 
 import { TranscriptionTool, ToolContext, ToolResult } from '../types';
+import type { RedaksjonEntity, Project } from '@redaksjon/context';
 
 /**
  * Extract context from transcript around where a term is mentioned.
@@ -144,14 +145,14 @@ export const create = (ctx: ToolContext): TranscriptionTool => ({
         if (ctx.routingInstance) {
             const allProjects = context.getAllProjects();
             // Use the first active project as a context hint (could be improved)
-            const activeProject = allProjects.find(p => p.active !== false);
+            const activeProject = allProjects.find((p: Project) => p.active !== false);
             contextProjectId = activeProject?.id;
         }
     
         // Use context-aware search (prefers related projects)
         const searchResults = context.searchWithContext(args.name, contextProjectId);
-        const projectMatches = searchResults.filter(e => e.type === 'project');
-        const termMatches = searchResults.filter(e => e.type === 'term');
+        const projectMatches = searchResults.filter((e: RedaksjonEntity) => e.type === 'project');
+        const termMatches = searchResults.filter((e: RedaksjonEntity) => e.type === 'term');
     
         if (projectMatches.length > 0) {
             const project = projectMatches[0];
@@ -173,7 +174,7 @@ export const create = (ctx: ToolContext): TranscriptionTool => ({
             if (termProjects.length > 0) {
                 // Get the first associated project
                 const allProjects = context.getAllProjects();
-                const associatedProject = allProjects.find(p => p.id === termProjects[0]);
+                const associatedProject = allProjects.find((p: Project) => p.id === termProjects[0]);
                 
                 if (associatedProject) {
                     return {
@@ -206,7 +207,7 @@ export const create = (ctx: ToolContext): TranscriptionTool => ({
                 
                 if (termProjects.length > 0) {
                     const allProjects = context.getAllProjects();
-                    const associatedProject = allProjects.find(p => p.id === termProjects[0]);
+                    const associatedProject = allProjects.find((p: Project) => p.id === termProjects[0]);
                     
                     if (associatedProject) {
                         return {
@@ -228,7 +229,7 @@ export const create = (ctx: ToolContext): TranscriptionTool => ({
             const allProjects = context.getAllProjects();
             for (const project of allProjects) {
                 const phrases = project.classification?.explicit_phrases ?? [];
-                if (phrases.some(p => args.triggerPhrase?.toLowerCase().includes(p.toLowerCase()))) {
+                if (phrases.some((p: string) => args.triggerPhrase?.toLowerCase().includes(p.toLowerCase()))) {
                     return {
                         success: true,
                         data: {
@@ -245,8 +246,8 @@ export const create = (ctx: ToolContext): TranscriptionTool => ({
         // The executor will decide whether to actually prompt based on handler availability
         const allProjects = context.getAllProjects();
         const projectOptions = allProjects
-            .filter(p => p.active !== false)
-            .map(p => `${p.name}${p.description ? ` - ${p.description}` : ''}`);
+            .filter((p: Project) => p.active !== false)
+            .map((p: Project) => `${p.name}${p.description ? ` - ${p.description}` : ''}`);
         
         // Extract filename from sourceFile path for cleaner display
         const fileName = ctx.sourceFile.split('/').pop() || ctx.sourceFile;
@@ -289,7 +290,7 @@ export const create = (ctx: ToolContext): TranscriptionTool => ({
                 term: args.name,
                 triggerPhrase: args.triggerPhrase,
                 message: `Project "${args.name}" not found. Asking user if this is a new project.`,
-                knownProjects: allProjects.filter(p => p.active !== false),
+                knownProjects: allProjects.filter((p: Project) => p.active !== false),
                 options: projectOptions,
             },
         };
