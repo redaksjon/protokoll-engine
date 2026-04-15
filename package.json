@@ -1,6 +1,6 @@
 {
   "name": "@redaksjon/protokoll-engine",
-  "version": "0.1.19-dev.0",
+  "version": "0.1.19",
   "description": "Processing engine for Protokoll - transcription pipeline, agentic execution, routing, and LLM integration",
   "type": "module",
   "main": "dist/index.js",
@@ -46,8 +46,8 @@
     "@anthropic-ai/sdk": "^0.71.2",
     "@google/generative-ai": "^0.24.1",
     "@kjerneverk/riotprompt": "^1.0.6",
-    "@redaksjon/context": "^0.0.15",
-    "@redaksjon/protokoll-format": "^0.1.10",
+    "@redaksjon/context": "^0.0.16",
+    "@redaksjon/protokoll-format": "^0.1.11",
     "@utilarium/cardigantime": "^0.0.27",
     "@utilarium/dreadcabinet": "^0.0.18",
     "dayjs": "^1.11.13",
