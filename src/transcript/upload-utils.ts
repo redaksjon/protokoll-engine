@@ -15,6 +15,7 @@ type TranscriptMetadata = {
     status: 'uploaded' | 'transcribing' | 'error' | 'initial' | 'enhanced' | 'reviewed' | 'in_progress' | 'closed' | 'archived' | 'deleted';
     audioFile?: string;
     originalFilename?: string;
+    audioSizeBytes?: number;
     audioHash?: string;
     date?: Date;
     title?: string;
@@ -28,6 +29,7 @@ type TranscriptMetadata = {
 export interface CreateUploadTranscriptParams {
   audioFile: string;          // Path to uploaded audio file
   originalFilename: string;   // Original uploaded filename
+  audioSizeBytes?: number;    // Uploaded audio size in bytes
   audioHash: string;          // File hash for deduplication
   outputDirectory: string;    // Where to create PKL
   title?: string;             // Optional title hint
@@ -83,6 +85,7 @@ export async function createUploadTranscript(
         status: 'uploaded',
         audioFile: params.audioFile,  // Actual filename on disk (e.g. hash.ext) for worker to locate file
         originalFilename: params.originalFilename,
+        audioSizeBytes: params.audioSizeBytes,
         audioHash: params.audioHash,
         date: new Date(),
         title: params.title,
