@@ -487,6 +487,153 @@ export const combineTranscripts = async (
 };
 
 /**
+ * Resolve a sortable timestamp for chronological ordering.
+ */
+export function getTranscriptSortTimestamp(parsed: ParsedTranscript): number {
+    if (parsed.metadata.date) {
+        const dateParts = parsed.metadata.date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (dateParts) {
+            const year = parseInt(dateParts[1], 10);
+            const month = parseInt(dateParts[2], 10);
+            const day = parseInt(dateParts[3], 10);
+            let hours = 0;
+            let minutes = 0;
+            if (parsed.metadata.time) {
+                const timeMatch = parsed.metadata.time.match(/^(\d{1,2}):(\d{2})/);
+                if (timeMatch) {
+                    hours = parseInt(timeMatch[1], 10);
+                    minutes = parseInt(timeMatch[2], 10);
+                }
+            }
+            return new Date(year, month - 1, day, hours, minutes).getTime();
+        }
+
+        const parsedDate = new Date(
+            parsed.metadata.time
+                ? `${parsed.metadata.date}T${parsed.metadata.time}`
+                : parsed.metadata.date
+        );
+        if (!isNaN(parsedDate.getTime())) {
+            return parsedDate.getTime();
+        }
+    }
+
+    const timestamp = extractTimestampFromFilename(parsed.filePath);
+    if (timestamp) {
+        const now = new Date();
+        return new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            timestamp.day,
+            timestamp.hour,
+            timestamp.minute
+        ).getTime();
+    }
+
+    return 0;
+}
+
+function buildCombinedTranscriptSections(transcripts: ParsedTranscript[]): string {
+    const contentParts: string[] = [];
+    for (let i = 0; i < transcripts.length; i++) {
+        const t = transcripts[i];
+        const sectionTitle = t.title || `Part ${i + 1}`;
+        const sourceFile = path.basename(t.filePath);
+
+        contentParts.push(`## ${sectionTitle}`);
+        contentParts.push(`*Source: ${sourceFile}*`);
+        contentParts.push('');
+        contentParts.push(t.content);
+        contentParts.push('');
+    }
+
+    return contentParts.join('\n');
+}
+
+/**
+ * Join multiple transcripts into an existing target transcript file.
+ * Sections are ordered chronologically by recording date/time.
+ */
+export const joinTranscriptsIntoTarget = async (
+    targetPath: string,
+    transcriptPaths: string[],
+    options: {
+        dryRun?: boolean;
+    } = {}
+): Promise<{ outputPath: string; content: string; orderedPaths: string[] }> => {
+    if (transcriptPaths.length < 2) {
+        throw new Error('At least 2 transcript files are required');
+    }
+
+    const absoluteTarget = path.resolve(ensurePklExtension(targetPath));
+    const absolutePaths = transcriptPaths.map((filePath) => path.resolve(ensurePklExtension(filePath)));
+
+    if (!absolutePaths.some((filePath) => filePath === absoluteTarget)) {
+        throw new Error('Target transcript must be included in transcriptPaths');
+    }
+
+    const parsedList: ParsedTranscript[] = [];
+    for (const filePath of absolutePaths) {
+        parsedList.push(await parseTranscript(filePath));
+    }
+
+    parsedList.sort((a, b) => {
+        const timeCompare = getTranscriptSortTimestamp(a) - getTranscriptSortTimestamp(b);
+        if (timeCompare !== 0) {
+            return timeCompare;
+        }
+        return path.basename(a.filePath).localeCompare(path.basename(b.filePath));
+    });
+
+    if (!parsedList.some((parsed) => path.resolve(parsed.filePath) === absoluteTarget)) {
+        throw new Error(`Target transcript not found: ${targetPath}`);
+    }
+
+    const combinedContent = buildCombinedTranscriptSections(parsedList);
+
+    let totalSeconds = 0;
+    let hasDuration = false;
+    const allTags = new Set<string>();
+    for (const transcript of parsedList) {
+        if (transcript.metadata.duration) {
+            hasDuration = true;
+            totalSeconds += parseDuration(transcript.metadata.duration);
+        }
+        if (transcript.metadata.tags) {
+            for (const tag of transcript.metadata.tags) {
+                allTags.add(tag);
+            }
+        }
+    }
+
+    if (!options.dryRun) {
+        const transcript = PklTranscript.open(absoluteTarget, { readOnly: false });
+        try {
+            transcript.updateContent(combinedContent);
+
+            const metadataUpdates: Partial<PklMetadata> = {};
+            if (allTags.size > 0) {
+                metadataUpdates.tags = Array.from(allTags).sort();
+            }
+            if (hasDuration && totalSeconds > 0) {
+                metadataUpdates.duration = formatDuration(totalSeconds);
+            }
+            if (Object.keys(metadataUpdates).length > 0) {
+                transcript.updateMetadata(metadataUpdates as Partial<PklMetadata>);
+            }
+        } finally {
+            transcript.close();
+        }
+    }
+
+    return {
+        outputPath: absoluteTarget,
+        content: combinedContent,
+        orderedPaths: parsedList.map((parsed) => parsed.filePath),
+    };
+};
+
+/**
  * Edit transcript metadata and content
  * PKL-only implementation
  */
